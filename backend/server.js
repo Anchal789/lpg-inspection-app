@@ -103,8 +103,8 @@ app.use(globalErrorHandler)
 // Start server
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📱 API Base URL: http://192.168.227.109:${PORT}/api`)
-  console.log(`🏥 Health Check: http://192.168.227.109:${PORT}/api/health`)
+  console.log(`📱 API Base URL: https://lpg-inspection-app-production.up.railway.app/api`)
+  console.log(`🏥 Health Check: https://lpg-inspection-app-production.up.railway.app/api/health`)
 })
 
 module.exports = app

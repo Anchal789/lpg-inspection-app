@@ -1,7 +1,7 @@
 // API Service - Frontend to Backend communication
 // This file shows how your React Native app will communicate with your backend
 
-const API_BASE_URL = "http://192.168.227.109:3000/api" // Replace with your actual API URL
+const API_BASE_URL = "https://lpg-inspection-app-production.up.railway.app/api" // Replace with your actual API URL
 
 class ApiService {
   constructor() {

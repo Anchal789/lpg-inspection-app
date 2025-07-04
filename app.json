@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name":"LMI",
+    "icon": "./assets/logo.png",
+    "extra": {
+      "eas": {
+        "projectId": "76d91ff7-6822-446e-b882-fce60304d89c"
+      }
+    },
+    "android": {
+      "package": "com.anchaldeshmukh789.lpginspectionapp"
+    }
+  }
+}
