@@ -127,7 +127,11 @@ const PORT = process.env.PORT || 3000
 
 // PRODUCTION CORS Configuration - Allows all origins for mobile apps
 const corsOptions = {
-  origin: true, // Allow all origins for mobile apps
+ origin: [
+    'http://localhost:19006',  // Expo web dev server
+    'http://localhost:3000',   // Common dev server
+    'https://your-production-domain.com'  // Your production domain
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
