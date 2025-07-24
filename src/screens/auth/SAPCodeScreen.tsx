@@ -1,158 +1,198 @@
 "use client"
 
 import { useState } from "react"
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from "react-native"
+import { useAuth } from "../../context/AuthContext"
+import ApiService from "../../api/api-service"
 
-const SAPCodeScreen = () => {
+const SAPCodeScreen = ({ navigation }) => {
   const [sapCode, setSapCode] = useState("")
-  const navigation = useNavigation()
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState({})
+  const { login } = useAuth()
 
-  const handleSubmit = () => {
-    if (!sapCode.trim()) {
-      Alert.alert("Error", "Please enter SAP code")
+  const validateSapCode = (code) => {
+    const newErrors = {}
+
+    if (!code.trim()) {
+      newErrors.sapCode = "SAP code is required"
+    } else if (code.length < 5) {
+      newErrors.sapCode = "SAP code must be at least 5 characters"
+    } else if (code.length > 10) {
+      newErrors.sapCode = "SAP code must not exceed 10 characters"
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleContinue = async () => {
+    if (!validateSapCode(sapCode)) {
       return
     }
 
-    // Mock validation - in real app, validate against backend
-    if (sapCode === "DIST001") {
-      navigation.navigate("Login" as never, { sapCode } as never)
-    } else {
-      Alert.alert("Error", "Invalid SAP code")
+    setLoading(true)
+
+    try {
+      // Test connection first
+      const connectionTest = await ApiService.testConnection()
+      if (!connectionTest.success) {
+        Alert.alert(
+          "Connection Error",
+          "Unable to connect to server. Please check your internet connection and try again.",
+          [{ text: "OK" }],
+        )
+        setLoading(false)
+        return
+      }
+
+      // Validate SAP code with backend
+      const response = await ApiService.validateSapCode(sapCode.trim())
+
+      if (response.success) {
+        // SAP code is valid, navigate to login
+        navigation.navigate("Login", { sapCode: sapCode.trim() })
+      } else {
+        Alert.alert("Invalid SAP Code", response.error || "SAP code not found in database. Please contact admin.", [
+          { text: "OK" },
+        ])
+      }
+    } catch (error) {
+      console.error("SAP validation error:", error)
+      Alert.alert("Error", "Failed to validate SAP code. Please try again.", [{ text: "OK" }])
+    } finally {
+      setLoading(false)
     }
   }
 
+  const handleRegister = () => {
+    navigation.navigate("DistributorSignup")
+  }
+
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <View style={styles.content}>
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={{ uri: "/placeholder.svg?height=120&width=120" }} style={styles.logo} />
-          <Text style={styles.title}>LPG Safety Inspector</Text>
-          <Text style={styles.subtitle}>Professional Gas Safety Solutions</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>LPG Inspection</Text>
+        <Text style={styles.subtitle}>Enter your SAP Code to continue</Text>
+      </View>
+
+      <View style={styles.form}>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>SAP Code</Text>
+          <TextInput
+            style={[styles.input, errors.sapCode && styles.inputError]}
+            value={sapCode}
+            onChangeText={(text) => {
+              setSapCode(text)
+              if (errors.sapCode) {
+                validateSapCode(text)
+              }
+            }}
+            placeholder="Enter SAP Code"
+            autoCapitalize="characters"
+            maxLength={10}
+            editable={!loading}
+          />
+          {errors.sapCode && <Text style={styles.errorText}>{errors.sapCode}</Text>}
         </View>
 
-        {/* Form */}
-        <View style={styles.formContainer}>
-          <Text style={styles.label}>Enter SAP Code</Text>
-          <TextInput
-            style={styles.input}
-            value={sapCode}
-            onChangeText={setSapCode}
-            placeholder="Enter your distributor SAP code"
-            placeholderTextColor="#9CA3AF"
-            autoCapitalize="characters"
-          />
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleContinue}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Continue</Text>}
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>Continue</Text>
-          </TouchableOpacity>
-
-          {/* Sign up link */}
-          <TouchableOpacity style={styles.signupLink} onPress={() => navigation.navigate("DistributorSignup" as never)}>
-            <Text style={styles.signupText}>
-              New Distributor? <Text style={styles.signupTextBold}>Sign Up here</Text>
-            </Text>
+        <View style={styles.registerContainer}>
+          <Text style={styles.registerText}>Don't have an account?</Text>
+          <TouchableOpacity onPress={handleRegister} disabled={loading}>
+            <Text style={styles.registerLink}>Register as Distributor</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#f5f5f5",
+    padding: 20,
   },
-  content: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  logoContainer: {
+  header: {
     alignItems: "center",
-    marginBottom: 48,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: 16,
+    marginTop: 60,
+    marginBottom: 40,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#1F2937",
-    textAlign: "center",
-    marginBottom: 8,
+    color: "#333",
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: "#6B7280",
+    color: "#666",
     textAlign: "center",
   },
-  formContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  form: {
+    flex: 1,
+  },
+  inputContainer: {
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#374151",
+    color: "#333",
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 15,
     fontSize: 16,
-    backgroundColor: "#F9FAFB",
-    marginBottom: 24,
+    backgroundColor: "#fff",
   },
-  submitButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginBottom: 16,
+  inputError: {
+    borderColor: "#ff4444",
   },
-  submitButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  signupLink: {
-    alignItems: "center",
-  },
-  signupText: {
+  errorText: {
+    color: "#ff4444",
     fontSize: 14,
-    color: "#6B7280",
+    marginTop: 5,
   },
-  signupTextBold: {
-    color: "#2563EB",
+  button: {
+    backgroundColor: "#007bff",
+    padding: 15,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  buttonDisabled: {
+    backgroundColor: "#ccc",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
+  },
+  registerContainer: {
+    alignItems: "center",
+    marginTop: 30,
+  },
+  registerText: {
+    color: "#666",
+    fontSize: 14,
+  },
+  registerLink: {
+    color: "#007bff",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 5,
   },
 })
 

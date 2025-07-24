@@ -8,6 +8,8 @@ interface Product {
   price: number
   minPrice: number
   quantity: number
+  assignedQuantity?: number
+  soldQuantity?: number
 }
 
 interface Inspection {
@@ -43,64 +45,40 @@ interface DeliveryMan {
   assignedProducts: Product[]
 }
 
+interface AppSettings {
+  hotplateName: string
+  hotplatePrice: number
+  hotplateExchangeRate: number
+  portablePlatformName: string
+  portablePlatformPrice: number
+}
+
 interface DataContextType {
   inspections: Inspection[]
   deliveryMen: DeliveryMan[]
   products: Product[]
+  appSettings: AppSettings
   addInspection: (inspection: Inspection) => void
   addProduct: (product: Product) => void
-  assignProductToDeliveryMan: (deliveryManId: string, product: Product) => void
+  assignProductToDeliveryMan: (deliveryManId: string, product: Product, quantity: number) => void
   getInspectionsByDeliveryMan: (deliveryManId: string) => Inspection[]
+  updateAppSettings: (settings: Partial<AppSettings>) => void
+  updateProductStock: (productId: string, soldQuantity: number) => void
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
-  const [inspections, setInspections] = useState<Inspection[]>([
-    {
-      id: "1",
-      consumerName: "Rajesh Kumar",
-      consumerNumber: "LPG001234",
-      mobileNumber: "+91 9876543210",
-      address: "123 MG Road, Bangalore",
-      deliveryManId: "1",
-      deliveryManName: "Ravi Singh",
-      date: "2024-01-15T10:30:00Z",
-      answers: { 0: "yes", 1: "yes", 2: "no", 3: "yes" },
-      images: ["image1.jpg"],
-      products: [
-        { id: "1", name: "Gas Cylinder", price: 850, quantity: 1 },
-        { id: "2", name: "Regulator", price: 200, quantity: 1 },
-      ],
-      totalAmount: 1050,
-      location: { latitude: 12.9716, longitude: 77.5946 },
-    },
-  ])
-
-  const [deliveryMen, setDeliveryMen] = useState<DeliveryMan[]>([
-    {
-      id: "1",
-      name: "Ravi Singh",
-      phone: "+91 9876543210",
-      totalInspections: 25,
-      totalSales: 45000,
-      assignedProducts: [],
-    },
-    {
-      id: "2",
-      name: "Amit Sharma",
-      phone: "+91 9876543211",
-      totalInspections: 18,
-      totalSales: 32000,
-      assignedProducts: [],
-    },
-  ])
-
-  const [products, setProducts] = useState<Product[]>([
-    { id: "1", name: "Gas Cylinder", price: 850, minPrice: 800, quantity: 100 },
-    { id: "2", name: "Regulator", price: 200, minPrice: 180, quantity: 50 },
-    { id: "3", name: "Gas Stove", price: 1500, minPrice: 1400, quantity: 25 },
-  ])
+  const [inspections, setInspections] = useState<Inspection[]>([])
+  const [deliveryMen, setDeliveryMen] = useState<DeliveryMan[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [appSettings, setAppSettings] = useState<AppSettings>({
+    hotplateName: "Hi-star hotplate",
+    hotplatePrice: 900,
+    hotplateExchangeRate: 450,
+    portablePlatformName: "Portable Platform",
+    portablePlatformPrice: 0,
+  })
 
   const addInspection = (inspection: Inspection) => {
     setInspections((prev) => [...prev, inspection])
@@ -117,20 +95,54 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           : dm,
       ),
     )
+
+    // Update product stock
+    inspection.products.forEach((product) => {
+      updateProductStock(product.id, product.quantity)
+    })
   }
 
   const addProduct = (product: Product) => {
     setProducts((prev) => [...prev, product])
   }
 
-  const assignProductToDeliveryMan = (deliveryManId: string, product: Product) => {
+  const assignProductToDeliveryMan = (deliveryManId: string, product: Product, quantity: number) => {
+    // Check remaining stock
+    const remainingStock = product.quantity - (product.assignedQuantity || 0) - (product.soldQuantity || 0)
+
+    if (quantity > remainingStock) {
+      throw new Error(`Only ${remainingStock} units available`)
+    }
+
     setDeliveryMen((prev) =>
-      prev.map((dm) => (dm.id === deliveryManId ? { ...dm, assignedProducts: [...dm.assignedProducts, product] } : dm)),
+      prev.map((dm) =>
+        dm.id === deliveryManId
+          ? {
+              ...dm,
+              assignedProducts: [...dm.assignedProducts, { ...product, quantity }],
+            }
+          : dm,
+      ),
+    )
+
+    // Update product assigned quantity
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, assignedQuantity: (p.assignedQuantity || 0) + quantity } : p)),
+    )
+  }
+
+  const updateProductStock = (productId: string, soldQuantity: number) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, soldQuantity: (p.soldQuantity || 0) + soldQuantity } : p)),
     )
   }
 
   const getInspectionsByDeliveryMan = (deliveryManId: string) => {
     return inspections.filter((inspection) => inspection.deliveryManId === deliveryManId)
+  }
+
+  const updateAppSettings = (settings: Partial<AppSettings>) => {
+    setAppSettings((prev) => ({ ...prev, ...settings }))
   }
 
   return (
@@ -139,10 +151,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         inspections,
         deliveryMen,
         products,
+        appSettings,
         addInspection,
         addProduct,
         assignProductToDeliveryMan,
         getInspectionsByDeliveryMan,
+        updateAppSettings,
+        updateProductStock,
       }}
     >
       {children}

@@ -1,226 +1,221 @@
 const express = require("express")
 const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
-const Distributor = require("../models/Distributor")
 const DeliveryMan = require("../models/DeliveryMan")
-const DistributorRequest = require("../models/DistributorRequest")
+const Distributor = require("../models/Distributor")
+const { validatePhone, validateSapCode, validatePassword } = require("../utils/validators")
+const { handleError } = require("../utils/errorHandler")
 
 const router = express.Router()
 
-// Register Distributor Request
-router.post("/register-distributor", async (req, res, next) => {
-  try {
-    const { sapCode, agencyName, adminName, password, deliveryMen } = req.body
-
-    // Validate required fields
-    if (!sapCode || !agencyName || !adminName || !password) {
-      return res.status(400).json({
-        success: false,
-        error: "All required fields must be provided",
-      })
-    }
-
-    // Check if SAP code already exists
-    const existingRequest = await DistributorRequest.findOne({ sapCode })
-    const existingDistributor = await Distributor.findOne({ sapCode })
-
-    if (existingRequest || existingDistributor) {
-      return res.status(409).json({
-        success: false,
-        error: "SAP code already exists",
-      })
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Hash delivery men passwords
-    const hashedDeliveryMen = deliveryMen
-      ? deliveryMen.map((dm) => ({
-          ...dm,
-          password: bcrypt.hashSync(dm.password, 10),
-        }))
-      : []
-
-    // Create distributor request
-    const distributorRequest = new DistributorRequest({
-      sapCode,
-      agencyName,
-      adminName,
-      password: hashedPassword,
-      deliveryMen: hashedDeliveryMen,
-    })
-
-    await distributorRequest.save()
-
-    res.status(201).json({
-      success: true,
-      message: "Registration request submitted successfully",
-      data: {
-        requestId: distributorRequest._id,
-        status: "pending",
-        contactInfo: {
-          email: "anchaldesh7@gmail.com",
-          phone: "+91 7747865603",
-          message: "Please contact administrator for approval",
-        },
-      },
-    })
-  } catch (error) {
-    next(error)
-  }
-})
-
-// Login
-router.post("/login", async (req, res, next) => {
-  try {
-    const { phone, password, sapCode } = req.body
-
-    if (!phone || !password || !sapCode) {
-      return res.status(400).json({
-        success: false,
-        error: "Phone, password, and SAP code are required",
-      })
-    }
-
-    // Check for super admin
-    if (
-      sapCode === process.env.SUPER_ADMIN_SAP_CODE &&
-      phone === process.env.SUPER_ADMIN_PHONE &&
-      password === process.env.SUPER_ADMIN_PASSWORD
-    ) {
-      const token = jwt.sign(
-        {
-          id: "super_admin",
-          role: "super_admin",
-          sapCode: sapCode,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: "24h" },
-      )
-
-      return res.json({
-        success: true,
-        data: {
-          user: {
-            id: "super_admin",
-            name: "Super Admin",
-            phone: phone,
-            role: "super_admin",
-            sapCode: sapCode,
-          },
-          token,
-        },
-      })
-    }
-
-    // Check distributor
-    const distributor = await Distributor.findOne({ sapCode, isActive: true })
-    if (distributor && phone === "admin" && (await bcrypt.compare(password, distributor.password))) {
-      const token = jwt.sign(
-        {
-          id: distributor._id,
-          role: "admin",
-          sapCode: distributor.sapCode,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: "24h" },
-      )
-
-      return res.json({
-        success: true,
-        data: {
-          user: {
-            id: distributor._id,
-            name: distributor.adminName,
-            phone: phone,
-            role: "admin",
-            sapCode: distributor.sapCode,
-          },
-          token,
-        },
-      })
-    }
-
-    // Check delivery man
-    const deliveryMan = await DeliveryMan.findOne({ phone, isActive: true }).populate("distributorId")
-
-    if (
-      deliveryMan &&
-      deliveryMan.distributorId.sapCode === sapCode &&
-      (await bcrypt.compare(password, deliveryMan.password))
-    ) {
-      const token = jwt.sign(
-        {
-          id: deliveryMan._id,
-          role: "delivery",
-          sapCode: sapCode,
-          distributorId: deliveryMan.distributorId._id,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: "24h" },
-      )
-
-      return res.json({
-        success: true,
-        data: {
-          user: {
-            id: deliveryMan._id,
-            name: deliveryMan.name,
-            phone: deliveryMan.phone,
-            role: "delivery",
-            sapCode: sapCode,
-          },
-          token,
-        },
-      })
-    }
-
-    res.status(401).json({
-      success: false,
-      error: "Invalid credentials",
-    })
-  } catch (error) {
-    next(error)
-  }
-})
-
-// Validate SAP Code
-router.post("/validate-sap", async (req, res, next) => {
+// Validate SAP Code endpoint
+router.post("/validate-sap", async (req, res) => {
   try {
     const { sapCode } = req.body
 
     if (!sapCode) {
       return res.status(400).json({
         success: false,
-        error: "SAP code is required",
+        message: "SAP code is required",
       })
     }
 
-    // Check if it's super admin SAP code
-    if (sapCode === process.env.SUPER_ADMIN_SAP_CODE) {
+    // Check for super admin SAP code
+    if (sapCode === "000000") {
       return res.json({
         success: true,
-        data: { valid: true, type: "super_admin" },
+        message: "Super Admin SAP code validated",
+        data: {
+          type: "super_admin",
+          name: "Super Admin",
+        },
       })
     }
 
-    // Check if distributor exists
-    const distributor = await Distributor.findOne({ sapCode, isActive: true })
-
-    if (distributor) {
-      return res.json({
-        success: true,
-        data: { valid: true, type: "distributor" },
+    // Validate SAP code format
+    if (!validateSapCode(sapCode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid SAP code format. Must be 5-10 alphanumeric characters.",
       })
     }
 
-    res.status(404).json({
-      success: false,
-      error: "Invalid SAP code",
+    // Check if distributor exists with this SAP code
+    const distributor = await Distributor.findOne({ sapCode: sapCode.toUpperCase() })
+
+    if (!distributor) {
+      return res.status(404).json({
+        success: false,
+        message: "SAP code not found. Please contact administrator.",
+      })
+    }
+
+    res.json({
+      success: true,
+      message: "SAP code validated successfully",
+      data: {
+        type: "distributor",
+        name: distributor.agencyName,
+        distributorId: distributor._id,
+      },
     })
   } catch (error) {
-    next(error)
+    console.error("SAP validation error:", error)
+    handleError(res, error, "SAP code validation failed")
+  }
+})
+
+// Login route for all user types
+router.post("/login", async (req, res) => {
+  try {
+    const { sapCode, phone, password } = req.body
+
+    // Validate input
+    if (!sapCode || !phone || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "SAP code, phone, and password are required",
+      })
+    }
+
+    // Check for super admin login
+    if (sapCode === "000000" && phone === "0987654321" && password === "7228") {
+      const token = jwt.sign(
+        {
+          id: "super_admin",
+          role: "super_admin",
+          sapCode: sapCode,
+          phone: phone,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "24h" },
+      )
+
+      return res.json({
+        success: true,
+        message: "Super admin login successful",
+        data: {
+          token,
+          user: {
+            id: "super_admin",
+            role: "super_admin",
+            name: "Super Admin",
+            sapCode: sapCode,
+            phone: phone,
+          },
+        },
+      })
+    }
+
+    // Validate SAP code format
+    if (!validateSapCode(sapCode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid SAP code format",
+      })
+    }
+
+    // Validate phone format
+    if (!validatePhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number format",
+      })
+    }
+
+    // Check for distributor admin login
+    const distributor = await Distributor.findOne({ sapCode: sapCode.toUpperCase() })
+
+    if (distributor && distributor.adminPhone === phone) {
+      // Check password
+      const isPasswordValid = await bcrypt.compare(password, distributor.adminPassword)
+      if (isPasswordValid) {
+        const token = jwt.sign(
+          {
+            id: distributor._id,
+            role: "admin",
+            sapCode: distributor.sapCode,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "24h" },
+        )
+
+        return res.json({
+          success: true,
+          message: "Admin login successful",
+          data: {
+            token,
+            user: {
+              id: distributor._id,
+              role: "admin",
+              name: distributor.adminName,
+              sapCode: distributor.sapCode,
+              phone: distributor.adminPhone,
+              agencyName: distributor.agencyName,
+            },
+          },
+        })
+      }
+    }
+
+    // Check for delivery man login
+    const deliveryMan = await DeliveryMan.findOne({ sapCode: sapCode.toUpperCase(), phone }).populate("distributorId")
+
+    if (!deliveryMan) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      })
+    }
+
+    // Check if delivery man is approved
+    if (deliveryMan.status !== "approved") {
+      return res.status(401).json({
+        success: false,
+        message: "Your account is not approved yet. Please contact your distributor.",
+      })
+    }
+
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, deliveryMan.password)
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      })
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        id: deliveryMan._id,
+        role: "delivery",
+        distributorId: deliveryMan.distributorId._id,
+        sapCode: deliveryMan.sapCode,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" },
+    )
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token,
+        user: {
+          id: deliveryMan._id,
+          role: "delivery",
+          name: deliveryMan.name,
+          phone: deliveryMan.phone,
+          sapCode: deliveryMan.sapCode,
+          distributor: deliveryMan.distributorId.agencyName,
+          distributorId: deliveryMan.distributorId._id,
+        },
+      },
+    })
+  } catch (error) {
+    console.error("Login error:", error)
+    handleError(res, error, "Login failed")
   }
 })
 

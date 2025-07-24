@@ -1,212 +1,242 @@
 "use client"
 
-import { useState } from "react"
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native"
-import { useNavigation, useRoute } from "@react-navigation/native"
+import { useState, useEffect } from "react"
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from "react-native"
+import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../../context/AuthContext"
+import ApiService from "../../api/api-service"
 
-const LoginScreen = () => {
+const LoginScreen = ({ navigation, route }) => {
   const [phone, setPhone] = useState("")
   const [password, setPassword] = useState("")
-  const navigation = useNavigation()
-  const route = useRoute()
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState({})
   const { login } = useAuth()
 
-  const sapCode = (route.params as any)?.sapCode || ""
+  const sapCode = route.params?.sapCode || ""
 
-  const handleLogin = () => {
-    if (!phone || !password) {
-      Alert.alert("Error", "Please fill all fields")
+  useEffect(() => {
+    if (!sapCode) {
+      navigation.navigate("SAPCode")
+    }
+  }, [sapCode])
+
+  const validateForm = () => {
+    const newErrors = {}
+
+    if (!phone.trim()) {
+      newErrors.phone = "Phone number is required"
+    } else if (phone.length !== 10) {
+      newErrors.phone = "Phone number must be exactly 10 digits"
+    } else if (!/^\d+$/.test(phone)) {
+      newErrors.phone = "Phone number must contain only numbers"
+    }
+
+    if (!password.trim()) {
+      newErrors.password = "Password is required"
+    } else if (password.length < 4) {
+      newErrors.password = "Password must be at least 4 characters"
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleLogin = async () => {
+    if (!validateForm()) {
       return
     }
 
-    // Mock authentication - in real app, validate against backend
-    if (phone === "9876543210" && password === "admin123") {
-      login({
-        id: "1",
-        name: "Admin User",
-        phone: phone,
-        role: "admin",
-        sapCode: sapCode,
-      })
-      navigation.navigate("AdminDashboard" as never)
-    } else if (phone === "9876543211" && password === "delivery123") {
-      login({
-        id: "2",
-        name: "Ravi Singh",
-        phone: phone,
-        role: "delivery",
-        sapCode: sapCode,
-      })
-      navigation.navigate("DeliveryDashboard" as never)
-    } else {
-      Alert.alert("Error", "Invalid credentials")
+    setLoading(true)
+
+    try {
+      const response = await ApiService.login(phone, password, sapCode)
+
+      if (response.success) {
+        await login(response.data)
+
+        // Navigate based on user role
+        if (response.data.role === "super_admin") {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "SuperAdminDashboard" }],
+          })
+        } else if (response.data.role === "admin") {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "AdminDashboard" }],
+          })
+        } else if (response.data.role === "delivery_man") {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "DeliveryDashboard" }],
+          })
+        }
+      } else {
+        Alert.alert("Login Failed", response.error || "Invalid credentials. Please try again.", [{ text: "OK" }])
+      }
+    } catch (error) {
+      console.error("Login error:", error)
+      Alert.alert("Error", "Login failed. Please check your internet connection and try again.", [{ text: "OK" }])
+    } finally {
+      setLoading(false)
     }
   }
 
+  const handleBack = () => {
+    navigation.goBack()
+  }
+
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <View style={styles.content}>
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={{ uri: "/placeholder.svg?height=100&width=100" }} style={styles.logo} />
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue</Text>
-        </View>
+    <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <Ionicons name="arrow-back" size={24} color="#333" />
+      </TouchableOpacity>
 
-        {/* Form */}
-        <View style={styles.formContainer}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="Enter your phone number"
-              keyboardType="phone-pad"
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              secureTextEntry
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
-
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Sign In</Text>
-          </TouchableOpacity>
-
-          {/* Register link */}
-          <TouchableOpacity style={styles.registerLink} onPress={() => navigation.navigate("Register" as never)}>
-            <Text style={styles.registerText}>Register a new user</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Demo credentials */}
-        <View style={styles.demoContainer}>
-          <Text style={styles.demoTitle}>Demo Credentials:</Text>
-          <Text style={styles.demoText}>Admin: 9876543210 / admin123</Text>
-          <Text style={styles.demoText}>Delivery: 9876543211 / delivery123</Text>
-        </View>
+      <View style={styles.header}>
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.subtitle}>SAP Code: {sapCode}</Text>
       </View>
-    </KeyboardAvoidingView>
+
+      <View style={styles.form}>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Phone Number</Text>
+          <TextInput
+            style={[styles.input, errors.phone && styles.inputError]}
+            value={phone}
+            onChangeText={(text) => {
+              setPhone(text.replace(/[^0-9]/g, ""))
+              if (errors.phone) {
+                setErrors((prev) => ({ ...prev, phone: null }))
+              }
+            }}
+            placeholder="Enter phone number"
+            keyboardType="numeric"
+            maxLength={10}
+            editable={!loading}
+          />
+          {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={[styles.passwordInput, errors.password && styles.inputError]}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text)
+                if (errors.password) {
+                  setErrors((prev) => ({ ...prev, password: null }))
+                }
+              }}
+              placeholder="Enter password"
+              secureTextEntry={!showPassword}
+              editable={!loading}
+            />
+            <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+          {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
+        </TouchableOpacity>
+      </View>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#f5f5f5",
+    padding: 20,
   },
-  content: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
+  backButton: {
+    marginTop: 40,
+    marginBottom: 20,
   },
-  logoContainer: {
+  header: {
     alignItems: "center",
     marginBottom: 40,
-  },
-  logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#1F2937",
-    marginBottom: 8,
+    color: "#333",
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: "#6B7280",
+    color: "#666",
   },
-  formContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    marginBottom: 20,
+  form: {
+    flex: 1,
   },
-  inputGroup: {
+  inputContainer: {
     marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#374151",
+    color: "#333",
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 15,
     fontSize: 16,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#fff",
   },
-  loginButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 12,
-    paddingVertical: 16,
+  inputError: {
+    borderColor: "#ff4444",
+  },
+  passwordContainer: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
-  },
-  loginButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  registerLink: {
-    alignItems: "center",
-  },
-  registerText: {
-    fontSize: 14,
-    color: "#2563EB",
-    fontWeight: "500",
-  },
-  demoContainer: {
-    backgroundColor: "#FEF3C7",
-    borderRadius: 12,
-    padding: 16,
     borderWidth: 1,
-    borderColor: "#F59E0B",
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
   },
-  demoTitle: {
+  passwordInput: {
+    flex: 1,
+    padding: 15,
+    fontSize: 16,
+    borderWidth: 0,
+  },
+  eyeButton: {
+    padding: 15,
+  },
+  errorText: {
+    color: "#ff4444",
     fontSize: 14,
-    fontWeight: "600",
-    color: "#92400E",
-    marginBottom: 8,
+    marginTop: 5,
   },
-  demoText: {
-    fontSize: 12,
-    color: "#92400E",
-    marginBottom: 4,
+  button: {
+    backgroundColor: "#007bff",
+    padding: 15,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  buttonDisabled: {
+    backgroundColor: "#ccc",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 })
 
