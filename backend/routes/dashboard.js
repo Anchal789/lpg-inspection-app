@@ -1,269 +1,204 @@
 const express = require("express");
-const Inspection = require("../models/Inspection");
+const Distributor = require("../models/Distributor");
 const DeliveryMan = require("../models/DeliveryMan");
+const Inspection = require("../models/Inspection");
 const Product = require("../models/Product");
-const { authenticateToken, requireAdmin } = require("../middleware/auth");
+const {
+	sendSuccess,
+	sendError,
+	asyncHandler,
+} = require("../utils/errorHandler");
+const { authenticateToken } = require("../middleware/auth");
 
 const router = express.Router();
 
-// Get dashboard statistics for distributor admin
+// Apply authentication to all routes
+router.use(authenticateToken);
+
+// Get dashboard statistics
 router.get(
-	"/stats/:distributorId",
-	authenticateToken,
-	requireAdmin,
-	async (req, res, next) => {
-		try {
-			const { distributorId } = req.params;
+	"/stats",
+	asyncHandler(async (req, res) => {
+		const { type, distributorId } = req.user;
+		let stats = {};
 
-			// Verify access
-			if (req.user.id !== distributorId) {
-				return res.status(403).json({
-					success: false,
-					error: "Access denied",
-				});
-			}
-
-			// Get current date range
-			const today = new Date();
-			today.setHours(0, 0, 0, 0);
-			const tomorrow = new Date(today);
-			tomorrow.setDate(tomorrow.getDate() + 1);
-
-			const thisWeekStart = new Date(today);
-			thisWeekStart.setDate(today.getDate() - today.getDay());
-
-			const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-			// Parallel queries for better performance
+		if (type === "super_admin") {
+			// Super admin sees all statistics
 			const [
-				totalInspections,
-				todayInspections,
-				thisWeekInspections,
-				thisMonthInspections,
+				totalDistributors,
 				totalDeliveryMen,
-				activeProducts,
-				salesData,
-				topPerformers,
+				totalInspections,
+				totalProducts,
+				recentInspections,
 			] = await Promise.all([
-				// Total inspections
+				Distributor.countDocuments(),
+				DeliveryMan.countDocuments(),
+				Inspection.countDocuments(),
+				Product.countDocuments(),
+				Inspection.find()
+					.populate("distributorId", "agencyName")
+					.populate("deliveryManId", "name")
+					.populate("productId", "name")
+					.sort({ createdAt: -1 })
+					.limit(10),
+			]);
+
+			stats = {
+				totalDistributors,
+				totalDeliveryMen,
+				totalInspections,
+				totalProducts,
+				recentInspections,
+			};
+		} else if (type === "distributor_admin") {
+			// Distributor admin sees their distributor's statistics
+			const [
+				totalDeliveryMen,
+				totalInspections,
+				totalProducts,
+				recentInspections,
+			] = await Promise.all([
+				DeliveryMan.countDocuments({ distributorId }),
 				Inspection.countDocuments({ distributorId }),
-
-				// Today's inspections
-				Inspection.countDocuments({
-					distributorId,
-					inspectionDate: { $gte: today, $lt: tomorrow },
-				}),
-
-				// This week's inspections
-				Inspection.countDocuments({
-					distributorId,
-					inspectionDate: { $gte: thisWeekStart },
-				}),
-
-				// This month's inspections
-				Inspection.countDocuments({
-					distributorId,
-					inspectionDate: { $gte: thisMonthStart },
-				}),
-
-				// Total delivery men
-				DeliveryMan.countDocuments({ distributorId, isActive: true }),
-
-				// Active products
-				Product.countDocuments({ distributorId, isActive: true }),
-
-				// Sales data
-				Inspection.aggregate([
-					{ $match: { distributorId: distributorId } },
-					{
-						$group: {
-							_id: null,
-							totalSales: { $sum: "$totalAmount" },
-							averageOrderValue: { $avg: "$totalAmount" },
-						},
-					},
-				]),
-
-				// Top performing delivery men
-				Inspection.aggregate([
-					{ $match: { distributorId: distributorId } },
-					{
-						$group: {
-							_id: "$deliveryManId",
-							totalInspections: { $sum: 1 },
-							totalSales: { $sum: "$totalAmount" },
-						},
-					},
-					{ $sort: { totalSales: -1 } },
-					{ $limit: 5 },
-					{
-						$lookup: {
-							from: "deliverymen",
-							localField: "_id",
-							foreignField: "_id",
-							as: "deliveryMan",
-						},
-					},
-					{ $unwind: "$deliveryMan" },
-					{
-						$project: {
-							name: "$deliveryMan.name",
-							totalInspections: 1,
-							totalSales: 1,
-						},
-					},
-				]),
+				Product.countDocuments({ distributorId }),
+				Inspection.find({ distributorId })
+					.populate("deliveryManId", "name")
+					.populate("productId", "name")
+					.sort({ createdAt: -1 })
+					.limit(10),
 			]);
 
-			// Weekly inspection trend
-			const weeklyTrend = await Inspection.aggregate([
-				{
-					$match: {
-						distributorId: distributorId,
-						inspectionDate: { $gte: thisWeekStart },
-					},
-				},
-				{
-					$group: {
-						_id: { $dayOfWeek: "$inspectionDate" },
-						count: { $sum: 1 },
-						sales: { $sum: "$totalAmount" },
-					},
-				},
-				{ $sort: { _id: 1 } },
-			]);
+			console.log("DeliveryMan", DeliveryMan)
 
-			const totalSales = salesData.length > 0 ? salesData[0].totalSales : 0;
-			const averageOrderValue =
-				salesData.length > 0 ? salesData[0].averageOrderValue : 0;
+			stats = {
+				totalDeliveryMen,
+				totalInspections,
+				totalProducts,
+				recentInspections,
+			};
+		} else if (type === "delivery_man") {
+			// Delivery man sees their own statistics
+			const deliveryManId = req.user.deliveryManId || req.user.id;
 
-			res.json({
-				success: true,
-				data: {
-					overview: {
-						totalInspections,
-						todayInspections,
-						thisWeekInspections,
-						thisMonthInspections,
-						totalDeliveryMen,
-						activeProducts,
-						totalSales,
-						averageOrderValue: Math.round(averageOrderValue || 0),
-					},
-					topPerformers,
-					weeklyTrend,
-					lastUpdated: new Date().toISOString(),
-				},
-			});
-		} catch (error) {
-			next(error);
-		}
-	}
-);
-
-// Get delivery man performance
-router.get(
-	"/delivery-man/:deliveryManId/performance",
-	authenticateToken,
-	async (req, res, next) => {
-		try {
-			const { deliveryManId } = req.params;
-
-			// Get delivery man details
-			const deliveryMan = await DeliveryMan.findById(deliveryManId).select(
-				"-password"
+			const deliveryMan = await DeliveryMan.findById(deliveryManId).populate(
+				"assignedProducts",
+				"name"
 			);
 
 			if (!deliveryMan) {
-				return res.status(404).json({
-					success: false,
-					error: "Delivery man not found",
-				});
+				return sendError(res, "Delivery man not found", 404);
 			}
 
-			// Check access permissions
-			if (req.user.role === "delivery" && req.user.id !== deliveryManId) {
-				return res.status(403).json({
-					success: false,
-					error: "Access denied",
-				});
-			}
+			const [totalInspections, recentInspections, deliveryMen] =
+				await Promise.all([
+					Inspection.countDocuments({ deliveryManId }),
+					Inspection.find({ deliveryManId })
+						.populate("productId", "name")
+						.sort({ createdAt: -1 })
+						.limit(10),
+					DeliveryMan.countDocuments(),
+				]);
 
-			if (
-				req.user.role === "admin" &&
-				req.user.id !== deliveryMan.distributorId.toString()
-			) {
-				return res.status(403).json({
-					success: false,
-					error: "Access denied",
-				});
-			}
-
-			// Get performance data
-			const today = new Date();
-			today.setHours(0, 0, 0, 0);
-			const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-
-			const [monthlyInspections, monthlyPerformance] = await Promise.all([
-				// Monthly inspections count
-				Inspection.countDocuments({
-					deliveryManId,
-					inspectionDate: { $gte: thisMonthStart },
-				}),
-
-				// Monthly performance details
-				Inspection.aggregate([
-					{
-						$match: {
-							deliveryManId: deliveryManId,
-							inspectionDate: { $gte: thisMonthStart },
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							totalSales: { $sum: "$totalAmount" },
-							averageOrderValue: { $avg: "$totalAmount" },
-							totalPassedQuestions: { $sum: "$passedQuestions" },
-							totalQuestions: {
-								$sum: { $add: ["$passedQuestions", "$failedQuestions"] },
-							},
-						},
-					},
-				]),
-			]);
-
-			const performance =
-				monthlyPerformance.length > 0 ? monthlyPerformance[0] : {};
-
-			res.json({
-				success: true,
-				data: {
-					deliveryMan: {
-						id: deliveryMan._id,
-						name: deliveryMan.name,
-						phone: deliveryMan.phone,
-						totalInspections: deliveryMan.totalInspections,
-						totalSales: deliveryMan.totalSales,
-					},
-					monthlyStats: {
-						inspections: monthlyInspections,
-						sales: performance.totalSales || 0,
-						averageOrderValue: Math.round(performance.averageOrderValue || 0),
-						safetyScore: performance.totalQuestions
-							? Math.round(
-									(performance.totalPassedQuestions /
-										performance.totalQuestions) *
-										100
-							  )
-							: 0,
-					},
-				},
-			});
-		} catch (error) {
-			next(error);
+			stats = {
+				totalInspections,
+				recentInspections,
+				assignedProducts: deliveryMan.assignedProducts,
+			};
 		}
-	}
+
+		return sendSuccess(res, stats, "Dashboard statistics fetched successfully");
+	})
+);
+
+// Get recent activity
+router.get(
+	"/recent-activity",
+	asyncHandler(async (req, res) => {
+		const { type, distributorId } = req.user;
+		console.log("📋 Recent activity requested for:", type, distributorId);
+
+		const query = {};
+		if (type === "distributor_admin") {
+			query.distributorId = distributorId;
+		} else if (type === "delivery_man") {
+			query.deliveryManId = req.user.deliveryManId || req.user.id;
+		}
+
+		const recentInspections = await Inspection.find(query)
+			.populate("distributorId", "agencyName")
+			.populate("deliveryManId", "name")
+			.populate("productId", "name type")
+			.sort({ createdAt: -1 })
+			.limit(20);
+
+		console.log(`✅ Found ${recentInspections.length} recent inspections`);
+		return sendSuccess(
+			res,
+			{ recentInspections },
+			"Recent activity fetched successfully"
+		);
+	})
+);
+
+// Get monthly statistics
+router.get(
+	"/monthly-stats",
+	asyncHandler(async (req, res) => {
+		const { type, distributorId } = req.user;
+		console.log("📊 Monthly stats requested for:", type, distributorId);
+
+		const currentDate = new Date();
+		const currentMonth = currentDate.getMonth();
+		const currentYear = currentDate.getFullYear();
+
+		// Get last 6 months
+		const months = [];
+		for (let i = 5; i >= 0; i--) {
+			const date = new Date(currentYear, currentMonth - i, 1);
+			months.push({
+				month: date.getMonth(),
+				year: date.getFullYear(),
+				name: date.toLocaleString("default", {
+					month: "short",
+					year: "numeric",
+				}),
+			});
+		}
+
+		const query = {};
+		if (type === "distributor_admin") {
+			query.distributorId = distributorId;
+		} else if (type === "delivery_man") {
+			query.deliveryManId = req.user.deliveryManId || req.user.id;
+		}
+
+		const monthlyStats = await Promise.all(
+			months.map(async (monthInfo) => {
+				const startDate = new Date(monthInfo.year, monthInfo.month, 1);
+				const endDate = new Date(monthInfo.year, monthInfo.month + 1, 0);
+
+				const count = await Inspection.countDocuments({
+					...query,
+					createdAt: {
+						$gte: startDate,
+						$lte: endDate,
+					},
+				});
+
+				return {
+					month: monthInfo.name,
+					count,
+				};
+			})
+		);
+
+		console.log("✅ Monthly stats fetched:", monthlyStats);
+		return sendSuccess(
+			res,
+			{ monthlyStats },
+			"Monthly statistics fetched successfully"
+		);
+	})
 );
 
 module.exports = router;

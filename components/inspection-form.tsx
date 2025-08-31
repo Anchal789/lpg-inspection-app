@@ -66,7 +66,6 @@ export function InspectionForm() {
 
   const handleSubmit = () => {
     // Form submission logic would go here
-    console.log("Form submitted:", formData)
     alert("Inspection form submitted successfully!")
   }
 

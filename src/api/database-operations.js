@@ -194,7 +194,7 @@ class DatabaseOperations {
   async getDashboardStats(distributorId) {
     try {
       const inspectionsCollection = this.db.collection("inspections")
-      const deliveryMenCollection = this.db.collection("delivery_men")
+      const deliveryMenCollection = this.db.collection("deliverymen")
 
       // Get total inspections
       const totalInspections = await inspectionsCollection.countDocuments({ distributorId })

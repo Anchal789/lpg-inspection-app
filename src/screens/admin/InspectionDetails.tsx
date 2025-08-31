@@ -33,25 +33,37 @@ const InspectionDetails = () => {
         <Text style={styles.sectionTitle}>Consumer Information</Text>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Name:</Text>
-          <Text style={styles.value}>{inspection.consumerName}</Text>
+          <Text style={styles.value}>{inspection.consumer.name}</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Consumer Number:</Text>
-          <Text style={styles.value}>{inspection.consumerNumber}</Text>
+          <Text style={styles.value}>{inspection.consumer.consumerNumber}</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Mobile:</Text>
-          <Text style={styles.value}>{inspection.mobileNumber}</Text>
+          <Text style={styles.value}>{inspection.consumer.mobileNumber}</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Address:</Text>
-          <Text style={styles.value}>{inspection.address}</Text>
+          <Text style={styles.value}>{inspection.consumer.address}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Inspection ID:</Text>
+          <Text style={styles.value}>{inspection.inspectionId}</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Date & Time:</Text>
           <Text style={styles.value}>
-            {new Date(inspection.date).toLocaleDateString()} at {new Date(inspection.date).toLocaleTimeString()}
+            {new Date(inspection.inspectionDate).toLocaleDateString()} at {new Date(inspection.inspectionDate).toLocaleTimeString()}
           </Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Delivery Person:</Text>
+          <Text style={styles.value}>{inspection.deliveryManId.name} ({inspection.deliveryManId.phone})</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Distributor:</Text>
+          <Text style={styles.value}>{inspection.distributorId.agencyName} ({inspection.distributorId.sapCode})</Text>
         </View>
         <TouchableOpacity style={styles.locationButton} onPress={openMaps}>
           <Text style={styles.locationButtonText}>📍 View Location</Text>
@@ -61,21 +73,21 @@ const InspectionDetails = () => {
       {/* Safety Questions */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Safety Inspection Results</Text>
-        {inspectionQuestions.map((question, index) => (
+        {inspection.safetyQuestions.map((questionObj: any, index: number) => (
           <View key={index} style={styles.questionRow}>
             <Text style={styles.questionText}>
-              {index + 1}. {question}
+              {index + 1}. {inspectionQuestions[questionObj.questionId]}
             </Text>
             <View
               style={[
                 styles.answerBadge,
-                { backgroundColor: inspection.answers[index] === "yes" ? "#10B981" : "#EF4444" },
+                { backgroundColor: questionObj.answer === "yes" ? "#10B981" : "#EF4444" },
               ]}
             >
-              <Text style={styles.answerText}>{inspection.answers[index] === "yes" ? "YES" : "NO"}</Text>
+              <Text style={styles.answerText}>{questionObj.answer === "yes" ? "YES" : "NO"}</Text>
             </View>
             {/* Show due date for Suraksha Hose question */}
-            {index === 4 && inspection.answers[index] === "yes" && inspection.surakshaHoseDueDate && (
+            {questionObj.questionId === 4 && questionObj.answer === "yes" && inspection.surakshaHoseDueDate && (
               <Text style={styles.dueDateText}>Due Date: {inspection.surakshaHoseDueDate}</Text>
             )}
           </View>
@@ -90,7 +102,7 @@ const InspectionDetails = () => {
             <View style={styles.productInfo}>
               <Text style={styles.productName}>{product.name}</Text>
               <Text style={styles.productDetails}>
-                Qty: {product.quantity} × ₹{product.price} = ₹{product.quantity * product.price}
+                Qty: {product.quantity} × ₹{product.price} = ₹{product.subtotal}
               </Text>
             </View>
           </View>
@@ -101,7 +113,7 @@ const InspectionDetails = () => {
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal:</Text>
             <Text style={styles.totalValue}>
-              ₹{inspection.products.reduce((sum: number, product: any) => sum + product.quantity * product.price, 0)}
+              ₹{inspection.products.reduce((sum: number, product: any) => sum + product.subtotal, 0)}
             </Text>
           </View>
 
@@ -137,14 +149,31 @@ const InspectionDetails = () => {
       {/* Images */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Kitchen Images</Text>
-        <View style={styles.imagesContainer}>
-          {inspection.images.map((image: string, index: number) => (
-            <Image
-              key={index}
-              source={{ uri: image || "/placeholder.svg?height=150&width=150" }}
-              style={styles.image}
-            />
-          ))}
+        {inspection.images.length > 0 ? (
+          <View style={styles.imagesContainer}>
+            {inspection.images.map((image: string, index: number) => (
+              <Image
+                key={index}
+                source={{ uri: image || "/placeholder.svg?height=150&width=150" }}
+                style={styles.image}
+              />
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.noImagesText}>No images captured during inspection</Text>
+        )}
+      </View>
+
+      {/* Status */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Inspection Status</Text>
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: inspection.status === "completed" ? "#10B981" : "#F59E0B" },
+          ]}
+        >
+          <Text style={styles.statusText}>{inspection.status.toUpperCase()}</Text>
         </View>
       </View>
     </ScrollView>
@@ -181,7 +210,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     color: "#6B7280",
-    width: 120,
+    width: 130,
   },
   value: {
     fontSize: 14,
@@ -200,6 +229,25 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "500",
+  },
+  summaryRow: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: "#374151",
+    textAlign: "center",
+  },
+  passedText: {
+    color: "#10B981",
+    fontWeight: "600",
+  },
+  failedText: {
+    color: "#EF4444",
+    fontWeight: "600",
   },
   questionRow: {
     flexDirection: "row",
@@ -244,33 +292,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
   },
-  totalRow: {
-    paddingTop: 12,
-    alignItems: "flex-end",
-  },
-  totalText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#10B981",
-  },
-  imagesContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  image: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: "#F3F4F6",
-  },
-  dueDateText: {
-    fontSize: 12,
-    color: "#F59E0B",
-    fontWeight: "500",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
   discountBreakdown: {
     backgroundColor: "#F9FAFB",
     borderRadius: 8,
@@ -310,6 +331,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "#10B981",
+  },
+  imagesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  image: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+  },
+  noImagesText: {
+    fontSize: 14,
+    color: "#6B7280",
+    fontStyle: "italic",
+    textAlign: "center",
+    paddingVertical: 20,
+  },
+  dueDateText: {
+    fontSize: 12,
+    color: "#F59E0B",
+    fontWeight: "500",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  statusBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignSelf: "center",
+  },
+  statusText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 })
 

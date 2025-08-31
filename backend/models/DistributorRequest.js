@@ -18,7 +18,12 @@ const distributorRequestSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    password: {
+    adminPhone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    adminPassword: {
       type: String,
       required: true,
     },
@@ -44,6 +49,10 @@ const distributorRequestSchema = new mongoose.Schema(
       default: "pending",
     },
     requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    requestDate: {
       type: Date,
       default: Date.now,
     },

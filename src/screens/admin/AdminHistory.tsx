@@ -1,42 +1,93 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking } from "react-native"
+"use client"
+
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Linking, Alert } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useData } from "../../context/DataContext"
+import { useAuth } from "../../context/AuthContext"
+import ApiService from "../../api/api-service"
+import { Ionicons } from "@expo/vector-icons"
 
 const AdminHistory = () => {
   const navigation = useNavigation()
-  const { deliveryMen, inspections } = useData()
+  const { deliveryMen, inspections, refreshData } = useData()
+  const { token } = useAuth()
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      await refreshData()
+    } catch (error) {
+      console.error("Error fetching data:", error)
+      Alert.alert("Error", "Failed to load data. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleCall = (phone: string) => {
     Linking.openURL(`tel:${phone}`)
   }
 
-  const renderDeliveryMan = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.deliveryManCard}
-      onPress={() => navigation.navigate("DeliveryManDetails" as never, { deliveryMan: item } as never)}
-    >
-      <View style={styles.deliveryManInfo}>
-        <Text style={styles.deliveryManName}>{item.name}</Text>
-        <Text style={styles.deliveryManStats}>
-          Inspections: {item.totalInspections} | Sales: ₹{item.totalSales.toLocaleString()}
-        </Text>
-        <Text style={styles.deliveryManPhone}>{item.phone}</Text>
-      </View>
-      <TouchableOpacity style={styles.callButton} onPress={() => handleCall(item.phone)}>
-        <Text style={styles.callButtonText}>📞</Text>
-      </TouchableOpacity>
-    </TouchableOpacity>
-  )
+  const renderDeliveryMan = ({ item }: { item: any }) => {
+    // Calculate stats for this delivery man
+    const deliveryManInspections = inspections.filter(inspection => inspection.deliveryManId === item.id)
+    const totalInspections = deliveryManInspections.length
+    const totalSales = deliveryManInspections.reduce((sum, inspection) => sum + inspection.totalAmount, 0)
 
+    return (
+      <TouchableOpacity
+        style={styles.deliveryManCard}
+        onPress={() => navigation.navigate("DeliveryManDetails" as never, { deliveryMan: { ...item, totalInspections, totalSales } } as never)}
+      >
+        <View style={styles.deliveryManInfo}>
+          <Text style={styles.deliveryManName}>{item.name}</Text>
+          <Text style={styles.deliveryManStats}>
+            Inspections: {totalInspections} | Sales: ₹{totalSales.toLocaleString()}
+          </Text>
+          <Text style={styles.deliveryManPhone}>{item.phone}</Text>
+        </View>
+        <TouchableOpacity style={styles.callButton} onPress={() => handleCall(item.phone)}>
+          <Text style={styles.callButtonText}>📞</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    )
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    )
+  }
+
+  // Extract the actual array from the deliveryMen object
+  const deliveryMenArray = Array.isArray(deliveryMen) ? deliveryMen : (deliveryMen || [])
+  
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Delivery Men Performance</Text>
       <FlatList
-        data={deliveryMen}
+        data={deliveryMenArray}
         renderItem={renderDeliveryMan}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        refreshing={loading}
+        onRefresh={fetchData}
+        ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="people" size={48} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No delivery men found</Text>
+              <Text style={styles.emptySubtext}>Add delivery men to start assigning products</Text>
+            </View>
+          }
       />
     </View>
   )
@@ -46,6 +97,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6B7280",
   },
   title: {
     fontSize: 20,
@@ -100,6 +161,23 @@ const styles = StyleSheet.create({
   },
   callButtonText: {
     fontSize: 20,
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#6B7280",
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    marginTop: 8,
+    textAlign: "center",
   },
 })
 

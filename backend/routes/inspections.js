@@ -1,242 +1,365 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const Inspection = require("../models/Inspection");
 const DeliveryMan = require("../models/DeliveryMan");
+const Product = require("../models/Product");
+const {
+	sendSuccess,
+	sendError,
+	asyncHandler,
+} = require("../utils/errorHandler");
 const { authenticateToken } = require("../middleware/auth");
 
 const router = express.Router();
 
-// Create new inspection
-router.post("/", authenticateToken, async (req, res, next) => {
-	try {
+// Apply authentication to all routes
+router.use(authenticateToken);
+
+// Create new inspection with S3 image URLs
+router.post(
+	"/",
+	asyncHandler(async (req, res) => {
+		const { type, distributorId } = req.user;
+		console.log("req.body", req.body);
+
 		const {
-			distributorId,
+			id,
+			consumerName,
+			consumerNumber,
+			mobileNumber,
+			address,
 			deliveryManId,
-			consumer,
-			safetyQuestions,
-			surakshaHoseDueDate,
-			images,
+			deliveryManName,
+			date,
+			answers,
+			images, // These will now be S3 URLs
 			products,
+			totalAmount,
+			location,
 			hotplateExchange,
 			otherDiscount,
-			location,
-			totalAmount,
-			inspectionDate,
+			surakshaHoseDueDate,
+			hotplateQuantity,
 		} = req.body;
 
 		// Validate required fields
-		if (!consumer || !safetyQuestions || !totalAmount || !inspectionDate) {
-			return res.status(400).json({
-				success: false,
-				error: "Missing required fields",
-			});
+		if (!consumerName || !mobileNumber || !address || !totalAmount) {
+			return sendError(res, "Missing required fields", 400);
 		}
 
-		// Calculate totals
-		const subtotalAmount = products.reduce(
-			(sum, product) => sum + product.price * product.quantity,
-			0
-		);
-		const totalDiscount = (hotplateExchange ? 450 : 0) + (otherDiscount || 0);
-		const passedQuestions = safetyQuestions.filter(
-			(q) => q.answer === "yes"
-		).length;
-		const failedQuestions = safetyQuestions.length - passedQuestions;
+		// Verify delivery man exists
+		let validDeliveryManId = req.user.deliveryManId || req.user.id;
+		if (deliveryManId) {
+			const deliveryMan = await DeliveryMan.findById(deliveryManId);
+			if (deliveryMan) {
+				validDeliveryManId = deliveryManId;
+			}
+		}
 
-		// Create inspection
+		// Validate products if provided
+		if (products && products.length > 0) {
+			const productIds = products
+				.map((product) => product._id || product.id)
+				.filter(
+					(id) =>
+						id &&
+						!id.toString().startsWith("hotplate_") &&
+						!id.toString().startsWith("platform_") &&
+						id !== "dummy_product_id"
+				);
+
+			if (productIds.length > 0) {
+				const foundProducts = await Product.find({ _id: { $in: productIds } });
+				console.log(
+					`Found ${foundProducts.length} products out of ${productIds.length} requested`
+				);
+
+				if (foundProducts.length !== productIds.length) {
+					const foundIds = foundProducts.map((p) => p._id.toString());
+					const missingIds = productIds.filter(
+						(id) => !foundIds.includes(id.toString())
+					);
+					console.log("Missing product IDs:", missingIds);
+				}
+			}
+		}
+
+		// Transform answers to safetyQuestions format
+		const safetyQuestions = answers
+			? Object.keys(answers).map((key) => ({
+					questionId: parseInt(key),
+					question: `Question ${parseInt(key) + 1}`,
+					answer: answers[key],
+			  }))
+			: [];
+
+		// Transform S3 images to proper format
+		const formattedImages = images
+			? images.map((image, index) => {
+					// Handle both string URLs and object formats
+					if (typeof image === 'string') {
+						return {
+							imageId: `img_${Date.now()}_${index}`,
+							imageUrl: image, // S3 URL
+							uploadedAt: new Date(),
+							fileSize: 0,
+						};
+					} else {
+						return {
+							imageId: image.imageId || `img_${Date.now()}_${index}`,
+							imageUrl: image.url || image.imageUrl, // S3 URL
+							uploadedAt: new Date(image.uploadedAt) || new Date(),
+							fileSize: image.size || 0,
+							s3Key: image.key, // Store S3 key for deletion if needed
+						};
+					}
+			  })
+			: [];
+
+		// Transform products to match schema
+		const formattedProducts = products
+			? products.map((product) => {
+					const productId = product._id || product.id;
+					const isValidObjectId =
+						mongoose.Types.ObjectId.isValid(productId) &&
+						productId.toString().length === 24;
+
+					return {
+						productId: isValidObjectId ? productId : null,
+						name: product.name,
+						price: product.price,
+						quantity: product.quantity || 1,
+						subtotal: (product.price || 0) * (product.quantity || 1),
+					};
+			  })
+			: [];
+
+		// Calculate passed/failed questions
+		const passedQuestions = Object.values(answers || {}).filter(
+			(answer) => answer === "yes"
+		).length;
+		const failedQuestions = Object.values(answers || {}).filter(
+			(answer) => answer === "no"
+		).length;
+
+		// Generate inspection ID if not provided
+		const inspectionId = id || `INS-${Date.now()}`;
+
+		// Create inspection with S3 URLs
 		const inspection = new Inspection({
-			distributorId: distributorId || req.user.distributorId,
-			deliveryManId,
-			consumer,
-			safetyQuestions,
-			surakshaHoseDueDate,
-			images: images || [],
-			products,
-			hotplateExchange: hotplateExchange || false,
-			otherDiscount: otherDiscount || 0,
-			subtotalAmount,
-			totalDiscount,
-			location,
-			totalAmount,
-			passedQuestions,
-			failedQuestions,
-			inspectionDate: new Date(inspectionDate),
-			status: failedQuestions > 0 ? "issues_found" : "completed",
+			inspectionId: inspectionId,
+			distributorId: distributorId,
+			deliveryManId: validDeliveryManId,
+			consumer: {
+				name: consumerName,
+				consumerNumber: consumerNumber,
+				mobileNumber: mobileNumber,
+				address: address,
+			},
+			safetyQuestions: safetyQuestions,
+			images: formattedImages, // Now contains S3 URLs
+			products: formattedProducts,
+			totalAmount: totalAmount,
+			location: {
+				latitude: location?.latitude || 0,
+				longitude: location?.longitude || 0,
+				address: address,
+				accuracy: location?.accuracy || 0,
+			},
+			status: "completed",
+			passedQuestions: passedQuestions,
+			failedQuestions: failedQuestions,
+			inspectionDate: date ? new Date(date) : new Date(),
+			hotplateExchange: hotplateExchange,
+			otherDiscount: otherDiscount,
+			surakshaHoseDueDate: surakshaHoseDueDate,
+			hotplateQuantity: hotplateQuantity,
 		});
 
 		await inspection.save();
 
-		// Update delivery man stats
-		await DeliveryMan.findByIdAndUpdate(deliveryManId, {
-			$inc: {
-				totalInspections: 1,
-				totalSales: totalAmount,
-			},
-		});
+		// Populate the created inspection
+		await inspection.populate([
+			{ path: "distributorId", select: "agencyName sapCode" },
+			{ path: "deliveryManId", select: "name phone" },
+			{ path: "products.productId", select: "name type serialNumber" },
+		]);
 
-		res.status(201).json({
-			success: true,
-			data: inspection,
-			message: "Inspection created successfully",
-		});
-	} catch (error) {
-		next(error);
-	}
-});
-
-// Get inspections by delivery man
-router.get(
-	"/delivery-man/:deliveryManId",
-	authenticateToken,
-	async (req, res, next) => {
-		try {
-			const { deliveryManId } = req.params;
-			const page = Number.parseInt(req.query.page) || 1;
-			const limit = Number.parseInt(req.query.limit) || 20;
-			const skip = (page - 1) * limit;
-
-			const inspections = await Inspection.find({ deliveryManId })
-				.populate("deliveryManId", "name")
-				.sort({ inspectionDate: -1 })
-				.skip(skip)
-				.limit(limit);
-
-			const total = await Inspection.countDocuments({ deliveryManId });
-
-			res.json({
-				success: true,
-				data: inspections,
-				pagination: {
-					page,
-					limit,
-					total,
-					totalPages: Math.ceil(total / limit),
-				},
-			});
-		} catch (error) {
-			next(error);
-		}
-	}
+		console.log("✅ Inspection created with S3 images:", inspection._id);
+		return sendSuccess(
+			res,
+			{ inspection },
+			"Inspection created successfully with S3 images",
+			201
+		);
+	})
 );
 
-// Search inspections
-router.get("/search", authenticateToken, async (req, res, next) => {
-	try {
-		const {
-			deliveryManId,
-			consumerName,
-			consumerNumber,
-			dateFrom,
-			dateTo,
-			distributorId,
-		} = req.query;
+// Get inspections - Updated to work with S3 URLs
+router.get(
+	"/",
+	asyncHandler(async (req, res) => {
+		const { type, distributorId } = req.user;
+		const { page = 1, limit = 10, status, search } = req.query;
+
+		console.log("📋 Fetching inspections for:", type, distributorId);
 
 		const query = {};
 
-		// Add distributor filter for admin users
-		if (req.user.role === "admin") {
-			query.distributorId = req.user.id;
-		} else if (distributorId) {
+		// Filter based on user type
+		if (type === "distributor_admin") {
+			query.distributorId = distributorId;
+		} else if (type === "delivery_man") {
+			query.deliveryManId = req.user.deliveryManId || req.user.id;
+		}
+
+		// Add status filter
+		if (status) {
+			query.status = status;
+		}
+
+		// Add search filter
+		if (search) {
+			query.$or = [
+				{ "consumer.name": { $regex: search, $options: "i" } },
+				{ "consumer.mobileNumber": { $regex: search, $options: "i" } },
+				{ "consumer.address": { $regex: search, $options: "i" } },
+				{ inspectionId: { $regex: search, $options: "i" } },
+			];
+		}
+
+		const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
+
+		const [inspections, total] = await Promise.all([
+			Inspection.find(query)
+				.populate("distributorId", "agencyName sapCode")
+				.populate("deliveryManId", "name phone")
+				.populate("products.productId", "name type serialNumber")
+				.sort({ createdAt: -1 })
+				.skip(skip)
+				.limit(Number.parseInt(limit)),
+			Inspection.countDocuments(query),
+		]);
+
+		const totalPages = Math.ceil(total / Number.parseInt(limit));
+
+		console.log(`✅ Found ${inspections.length} inspections with S3 images (${total} total)`);
+		return sendSuccess(
+			res,
+			{
+				inspections,
+				pagination: {
+					currentPage: Number.parseInt(page),
+					totalPages,
+					totalItems: total,
+					itemsPerPage: Number.parseInt(limit),
+				},
+			},
+			"Inspections fetched successfully"
+		);
+	})
+);
+
+// Get inspection by ID
+router.get(
+	"/:id",
+	asyncHandler(async (req, res) => {
+		const { id } = req.params;
+		const { type, distributorId } = req.user;
+
+		console.log("🔍 Fetching inspection:", id);
+
+		const query = { _id: id };
+
+		// Filter based on user type
+		if (type === "distributor_admin") {
+			query.distributorId = distributorId;
+		} else if (type === "delivery_man") {
+			query.deliveryManId = req.user.deliveryManId || req.user.id;
+		}
+
+		const inspection = await Inspection.findOne(query)
+			.populate("distributorId", "agencyName sapCode")
+			.populate("deliveryManId", "name phone")
+			.populate("products.productId", "name type serialNumber");
+
+		if (!inspection) {
+			return sendError(res, "Inspection not found or access denied", 404);
+		}
+
+		console.log("✅ Inspection fetched with S3 images:", inspection._id);
+		return sendSuccess(res, { inspection }, "Inspection fetched successfully");
+	})
+);
+
+// Update inspection
+router.put(
+	"/:id",
+	asyncHandler(async (req, res) => {
+		const { id } = req.params;
+		const { type, distributorId } = req.user;
+
+		console.log("📝 Updating inspection:", id);
+
+		const query = { _id: id };
+
+		// Filter based on user type
+		if (type === "distributor_admin") {
+			query.distributorId = distributorId;
+		} else if (type === "delivery_man") {
+			query.deliveryManId = req.user.deliveryManId || req.user.id;
+		}
+
+		const inspection = await Inspection.findOneAndUpdate(query, req.body, {
+			new: true,
+			runValidators: true,
+		})
+			.populate("distributorId", "agencyName sapCode")
+			.populate("deliveryManId", "name phone")
+			.populate("products.productId", "name type serialNumber");
+
+		if (!inspection) {
+			return sendError(res, "Inspection not found or access denied", 404);
+		}
+
+		console.log("✅ Inspection updated:", inspection._id);
+		return sendSuccess(res, { inspection }, "Inspection updated successfully");
+	})
+);
+
+// Delete inspection
+router.delete(
+	"/:id",
+	asyncHandler(async (req, res) => {
+		const { id } = req.params;
+		const { type, distributorId } = req.user;
+
+		console.log("🗑️ Deleting inspection:", id);
+
+		const query = { _id: id };
+
+		// Only super admin and distributor admin can delete
+		if (type === "delivery_man") {
+			return sendError(
+				res,
+				"Insufficient permissions to delete inspections",
+				403
+			);
+		}
+
+		if (type === "distributor_admin") {
 			query.distributorId = distributorId;
 		}
 
-		if (deliveryManId) {
-			query.deliveryManId = deliveryManId;
-		}
-
-		if (consumerName) {
-			query["consumer.name"] = { $regex: consumerName, $options: "i" };
-		}
-
-		if (consumerNumber) {
-			query["consumer.consumerNumber"] = {
-				$regex: consumerNumber,
-				$options: "i",
-			};
-		}
-
-		if (dateFrom && dateTo) {
-			query.inspectionDate = {
-				$gte: new Date(dateFrom),
-				$lte: new Date(dateTo),
-			};
-		}
-
-		const inspections = await Inspection.find(query)
-			.populate("deliveryManId", "name")
-			.sort({ inspectionDate: -1 })
-			.limit(100);
-
-		res.json({
-			success: true,
-			data: inspections,
-			count: inspections.length,
-		});
-	} catch (error) {
-		next(error);
-	}
-});
-
-// Get inspection by ID
-router.get("/:inspectionId", authenticateToken, async (req, res, next) => {
-	try {
-		const { inspectionId } = req.params;
-
-		const inspection = await Inspection.findById(inspectionId)
-			.populate("deliveryManId", "name phone")
-			.populate("distributorId", "agencyName");
+		const inspection = await Inspection.findOneAndDelete(query);
 
 		if (!inspection) {
-			return res.status(404).json({
-				success: false,
-				error: "Inspection not found",
-			});
+			return sendError(res, "Inspection not found or access denied", 404);
 		}
 
-		res.json({
-			success: true,
-			data: inspection,
-		});
-	} catch (error) {
-		next(error);
-	}
-});
-
-// Get all inspections (admin/super admin only)
-router.get("/", authenticateToken, async (req, res, next) => {
-	try {
-		const page = Number.parseInt(req.query.page) || 1;
-		const limit = Number.parseInt(req.query.limit) || 20;
-		const skip = (page - 1) * limit;
-
-		const query = {};
-
-		// Filter by distributor for admin users
-		if (req.user.role === "admin") {
-			query.distributorId = req.user.id;
-		}
-
-		const inspections = await Inspection.find(query)
-			.populate("deliveryManId", "name phone")
-			.populate("distributorId", "agencyName")
-			.sort({ inspectionDate: -1 })
-			.skip(skip)
-			.limit(limit);
-
-		const total = await Inspection.countDocuments(query);
-
-		res.json({
-			success: true,
-			data: inspections,
-			pagination: {
-				page,
-				limit,
-				total,
-				totalPages: Math.ceil(total / limit),
-			},
-		});
-	} catch (error) {
-		next(error);
-	}
-});
+		console.log("✅ Inspection deleted:", id);
+		return sendSuccess(res, null, "Inspection deleted successfully");
+	})
+);
 
 module.exports = router;

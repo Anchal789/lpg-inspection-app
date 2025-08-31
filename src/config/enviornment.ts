@@ -3,7 +3,8 @@ const getApiUrl = () => {
   if (process.env.NODE_ENV === "production") {
     return "https://lpg-inspection-backend-production.up.railway.app/api" // Your Railway backend URL
   }
-  return "https://lpg-inspection-backend-production.up.railway.app/api" // Local development
+  return "http://10.0.2.2:3000/api" // Local development
+  // return "https://lpg-inspection-backend-production.up.railway.app/api" // Local development
 }
 
 export const API_BASE_URL = getApiUrl()

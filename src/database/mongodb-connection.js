@@ -5,7 +5,7 @@ const { MongoClient } = require("mongodb")
 
 // MongoDB Atlas Connection String
 // Replace <username>, <password>, <cluster-url> with your actual credentials
-const MONGODB_URI = "mongodb+srv://anchaldeshmukh789:mukhDesh%407228@cluster0.k0qctek.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+const MONGODB_URI = "mongodb+srv://<username>:<password>@<cluster-url>/lpg-inspection?retryWrites=true&w=majority"
 
 class DatabaseConnection {
   constructor() {
