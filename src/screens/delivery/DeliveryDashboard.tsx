@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import ApiService from "../../api/api-service";
+import LoadingIndicator from "../../components/Loader";
 
 const DeliveryDashboard = () => {
 	const navigation = useNavigation();
@@ -158,8 +159,8 @@ const DeliveryDashboard = () => {
 
 	if (loading) {
 		return (
-			<View style={styles.loadingContainer}>
-				<Text style={styles.loadingText}>Loading dashboard...</Text>
+			<View>
+				<LoadingIndicator />
 			</View>
 		);
 	}

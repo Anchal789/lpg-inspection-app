@@ -17,6 +17,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import ApiService from "../../api/api-service";
 import { useAuth } from "../../context/AuthContext";
+import LoadingIndicator from "../../components/Loader";
 
 const SuperAdminDashboard = () => {
 	const { logout } = useAuth();
@@ -97,7 +98,7 @@ const SuperAdminDashboard = () => {
 							const response = await ApiService.approveDistributor(requestId);
 							if (response.success) {
 								Alert.alert("Success", "Distributor approved successfully!");
-								console.log("response", response)
+								console.log("response", response);
 								fetchDashboardData(); // Refresh data
 							} else {
 								Alert.alert(
@@ -195,7 +196,7 @@ const SuperAdminDashboard = () => {
 						year: "numeric",
 					})}
 				</Text>
-				
+
 				<Text style={styles.distributorStats}>
 					Rejected At:{" "}
 					{new Date(item.updatedAt).toLocaleTimeString("en-GB", {
@@ -217,8 +218,8 @@ const SuperAdminDashboard = () => {
 
 	if (loading) {
 		return (
-			<View style={styles.loadingContainer}>
-				<Text style={styles.loadingText}>Loading dashboard...</Text>
+			<View>
+				<LoadingIndicator />
 			</View>
 		);
 	}

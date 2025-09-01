@@ -14,16 +14,19 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const DeliveryHistory = () => {
 	const navigation = useNavigation();
 	const { inspections, refreshData } = useData();
-	const { user, token } = useAuth();
+	const { user } = useAuth();
 	const [showFilters, setShowFilters] = useState(false);
+	const [showDatePicker, setShowDatePicker] = useState(false);
+
 	const [filters, setFilters] = useState({
 		consumerName: "",
 		consumerNumber: "",
-		date: "",
+		date: null,
 	});
 	const [loading, setLoading] = useState(false);
 
@@ -58,7 +61,21 @@ const DeliveryHistory = () => {
 			inspection.consumer.consumerNumber
 				.toLowerCase()
 				.includes(filters.consumerNumber.toLowerCase());
-		const dateMatch = !filters.date || inspection.createdAt.includes(filters.date);
+		const dateMatch =
+			!filters.date ||
+			new Date(inspection.createdAt)
+				.toLocaleDateString("en-GB", {
+					day: "2-digit",
+					month: "short",
+					year: "numeric",
+				})
+				.includes(
+					filters.date.toLocaleDateString("en-GB", {
+						day: "2-digit",
+						month: "short",
+						year: "numeric",
+					})
+				);
 
 		return nameMatch && dateMatch && numberMatch;
 	});
@@ -170,13 +187,31 @@ const DeliveryHistory = () => {
 						</View>
 
 						<View style={styles.inputGroup}>
-							<Text style={styles.inputLabel}>Date (YYYY-MM-DD)</Text>
-							<TextInput
-								style={styles.input}
-								value={filters.date}
-								onChangeText={(text) => setFilters({ ...filters, date: text })}
-								placeholder='2024-01-15'
-							/>
+							<Text style={styles.inputLabel}>Date</Text>
+							<TouchableOpacity onPress={() => setShowDatePicker(true)}>
+								<Text style={styles.datePickerInput}>
+									{filters.date
+										? filters.date.toLocaleDateString("en-GB", {
+												day: "2-digit",
+												month: "short",
+												year: "numeric",
+										  })
+										: "Select Date"}
+								</Text>
+							</TouchableOpacity>
+
+							{showDatePicker && (
+								<DateTimePicker
+									mode='date'
+									value={filters.date || new Date()} // always pass Date object
+									onChange={(_event, date) => {
+										if (date) {
+											setFilters({ ...filters, date }); // save raw Date object
+										}
+										setShowDatePicker(false);
+									}}
+								/>
+							)}
 						</View>
 						<View style={styles.inputGroup}>
 							<Text style={styles.inputLabel}>Consumer number</Text>
@@ -249,6 +284,14 @@ const styles = StyleSheet.create({
 		padding: 12,
 		borderBottomWidth: 1,
 		borderBottomColor: "#F59E0B",
+	},
+	datePickerInput: {
+		backgroundColor: "#F8FAFC",
+		borderWidth: 1,
+		borderColor: "#E5E7EB",
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 15,
 	},
 	activeFiltersText: {
 		fontSize: 12,

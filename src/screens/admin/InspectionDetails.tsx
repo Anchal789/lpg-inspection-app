@@ -75,21 +75,23 @@ const InspectionDetails = () => {
         <Text style={styles.sectionTitle}>Safety Inspection Results</Text>
         {inspection.safetyQuestions.map((questionObj: any, index: number) => (
           <View key={index} style={styles.questionRow}>
-            <Text style={styles.questionText}>
-              {index + 1}. {inspectionQuestions[questionObj.questionId]}
-            </Text>
-            <View
-              style={[
-                styles.answerBadge,
-                { backgroundColor: questionObj.answer === "yes" ? "#10B981" : "#EF4444" },
-              ]}
-            >
-              <Text style={styles.answerText}>{questionObj.answer === "yes" ? "YES" : "NO"}</Text>
+            <View key={index} style={styles.questionRowNew}>
+              <Text style={styles.questionText}>
+                {index + 1}. {inspectionQuestions[questionObj.questionId]}
+              </Text>
+              <View
+                style={[
+                  styles.answerBadge,
+                  { backgroundColor: questionObj.answer === "yes" ? "#10B981" : "#EF4444" },
+                ]}
+              >
+                <Text style={styles.answerText}>{questionObj.answer === "yes" ? "YES" : "NO"}</Text>
+              </View>
+              {/* Show due date for Suraksha Hose question */}
             </View>
-            {/* Show due date for Suraksha Hose question */}
-            {questionObj.questionId === 4 && questionObj.answer === "yes" && inspection.surakshaHoseDueDate && (
-              <Text style={styles.dueDateText}>Due Date: {inspection.surakshaHoseDueDate}</Text>
-            )}
+              {questionObj.questionId === 4 && questionObj.answer === "yes" && inspection.surakshaHoseDueDate && (
+                <Text style={styles.dueDateText}>Due Date: {inspection.surakshaHoseDueDate}</Text>
+              )}
           </View>
         ))}
       </View>
@@ -249,8 +251,11 @@ const styles = StyleSheet.create({
     color: "#EF4444",
     fontWeight: "600",
   },
-  questionRow: {
+  questionRowNew: {
     flexDirection: "row",
+  },
+  questionRow: {
+    flexDirection: "column",
     alignItems: "flex-start",
     marginBottom: 12,
     paddingBottom: 12,
@@ -267,6 +272,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 4,
+    height: 26
   },
   answerText: {
     color: "#FFFFFF",

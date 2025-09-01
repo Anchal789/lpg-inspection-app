@@ -65,10 +65,17 @@ interface DataContextType {
 		deliveryManId: string,
 		product: Product
 	) => Promise<boolean>;
+	updateAssignedProduct: (
+		deliveryManId: string,
+		assignedProductId: string,
+		updateData: any
+	) => Promise<boolean>;
 	addInspection: (inspection: Inspection) => Promise<any>;
 	updateProductStock: (productId: string, soldQuantity: number) => void;
 	refreshData: () => Promise<void>;
 	toggleDeliveryManStatus: (deliveryManId: string) => Promise<boolean>;
+	updateAppSettings: (settingsData: Partial<AppSettings>) => Promise<any>;
+	resetAppSettings: () => Promise<any>;
 }
 
 const defaultAppSettings: AppSettings = {
@@ -88,7 +95,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	const [products, setProducts] = useState<Product[]>([]);
 	const [deliveryMen, setDeliveryMen] = useState<DeliveryMan[]>([]);
 	const [inspections, setInspections] = useState<Inspection[]>([]);
-	const [appSettings] = useState<AppSettings>(defaultAppSettings);
+	const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
@@ -118,7 +125,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 			// Get products - use distributorId from user context
 			if (user.distributorId) {
 				apiCalls.push(
-					ApiService.getProducts(user.distributorId).catch(error => {
+					ApiService.getProducts(user.distributorId).catch((error) => {
 						console.error("Products API error:", error);
 						return { success: false, error: error.message, data: [] };
 					})
@@ -127,10 +134,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				apiCalls.push(Promise.resolve({ success: false, data: [] }));
 			}
 
-			// Get delivery men - use distributorId from user context  
+			// Get delivery men - use distributorId from user context
 			if (user.distributorId) {
 				apiCalls.push(
-					ApiService.getDeliveryMen(user.distributorId).catch(error => {
+					ApiService.getDeliveryMen(user.distributorId).catch((error) => {
 						console.error("Delivery men API error:", error);
 						return { success: false, error: error.message, data: [] };
 					})
@@ -141,20 +148,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 
 			// Get inspections - no specific parameters needed for basic fetch
 			apiCalls.push(
-				ApiService.getInspections().catch(error => {
+				ApiService.getInspections().catch((error) => {
 					console.error("Inspections API error:", error);
 					return { success: false, error: error.message, data: [] };
 				})
 			);
 
+			// Get app settings - use distributorId from user context
+			if (user.distributorId) {
+				apiCalls.push(
+					ApiService.getAppSettings(user.distributorId).catch((error) => {
+						console.error("App settings API error:", error);
+						return { success: false, error: error.message, data: { appSettings: defaultAppSettings } };
+					})
+				);
+			} else {
+				apiCalls.push(Promise.resolve({ success: false, data: { appSettings: defaultAppSettings } }));
+			}
+
 			// Execute all API calls in parallel
-			const [productsResponse, deliveryMenResponse, inspectionsResponse] = await Promise.all(apiCalls);
+			const [productsResponse, deliveryMenResponse, inspectionsResponse, appSettingsResponse] =
+				await Promise.all(apiCalls);
 
 			// Handle products response
 			if (productsResponse?.success && productsResponse.data) {
 				// Handle both array and object responses
-				const productsData = Array.isArray(productsResponse.data) 
-					? productsResponse.data 
+				const productsData = Array.isArray(productsResponse.data)
+					? productsResponse.data
 					: productsResponse.data.products || [];
 				setProducts(productsData);
 			} else {
@@ -164,19 +184,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 
 			// Handle delivery men response
 			if (deliveryMenResponse?.success && deliveryMenResponse.data) {
-				const deliveryMenData = Array.isArray(deliveryMenResponse.data) 
-					? deliveryMenResponse.data 
+				const deliveryMenData = Array.isArray(deliveryMenResponse.data)
+					? deliveryMenResponse.data
 					: deliveryMenResponse.data.deliveryMen || [];
 				setDeliveryMen(deliveryMenData);
 			} else {
-				console.log("❌ Delivery men fetch failed:", deliveryMenResponse?.error);
+				console.log(
+					"❌ Delivery men fetch failed:",
+					deliveryMenResponse?.error
+				);
 				setDeliveryMen([]);
 			}
 
 			// Handle inspections response
 			if (inspectionsResponse?.success && inspectionsResponse.data) {
-				const inspectionsData = Array.isArray(inspectionsResponse.data) 
-					? inspectionsResponse.data 
+				const inspectionsData = Array.isArray(inspectionsResponse.data)
+					? inspectionsResponse.data
 					: inspectionsResponse.data.inspections || [];
 				setInspections(inspectionsData);
 			} else {
@@ -184,15 +207,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				setInspections([]);
 			}
 
+			// Handle app settings response
+			if (appSettingsResponse?.success && appSettingsResponse.data) {
+				const settingsData = appSettingsResponse.data.appSettings || appSettingsResponse.data;
+				setAppSettings(settingsData);
+			} else {
+				console.log("❌ App settings fetch failed:", appSettingsResponse?.error);
+				setAppSettings(defaultAppSettings);
+			}
+
 			// Store successful data in AsyncStorage as backup
 			try {
 				await AsyncStorage.setItem("products", JSON.stringify(products));
 				await AsyncStorage.setItem("deliveryMen", JSON.stringify(deliveryMen));
 				await AsyncStorage.setItem("inspections", JSON.stringify(inspections));
+				await AsyncStorage.setItem("appSettings", JSON.stringify(appSettings));
 			} catch (storageError) {
 				console.error("Storage error:", storageError);
 			}
-
 		} catch (error) {
 			console.error("❌ Error refreshing data:", error);
 			// Load from AsyncStorage as fallback
@@ -205,10 +237,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	const loadStoredData = async () => {
 		try {
 			console.log("📱 Loading stored data...");
-			
+
 			const storedProducts = await AsyncStorage.getItem("products");
 			const storedDeliveryMen = await AsyncStorage.getItem("deliveryMen");
 			const storedInspections = await AsyncStorage.getItem("inspections");
+			const storedAppSettings = await AsyncStorage.getItem("appSettings");
 
 			if (storedProducts) {
 				setProducts(JSON.parse(storedProducts));
@@ -224,8 +257,63 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				setInspections(JSON.parse(storedInspections));
 				console.log("🔍 Loaded stored inspections");
 			}
+
+			if (storedAppSettings) {
+				setAppSettings(JSON.parse(storedAppSettings));
+				console.log("⚙️ Loaded stored app settings");
+			}
 		} catch (error) {
 			console.error("Error loading stored data:", error);
+		}
+	};
+
+	const updateAppSettings = async (settingsData: Partial<AppSettings>): Promise<any> => {
+		try {
+			if (!token || !user?.distributorId) {
+				return { success: false, error: "No authentication token or distributor ID" };
+			}
+
+			ApiService.setToken(token);
+			const response = await ApiService.updateAppSettings(user.distributorId, settingsData);
+
+			if (response && response.success !== false) {
+				// Update local app settings state
+				setAppSettings(prev => ({ ...prev, ...settingsData }));
+				console.log("✅ App settings updated successfully");
+				return response;
+			}
+			return response || { success: false, error: "Unknown error" };
+		} catch (error) {
+			console.error("Error updating app settings:", error);
+			return {
+				success: false,
+				error: error.message || "Failed to update app settings",
+			};
+		}
+	};
+
+	const resetAppSettings = async (): Promise<any> => {
+		try {
+			if (!token || !user?.distributorId) {
+				return { success: false, error: "No authentication token or distributor ID" };
+			}
+
+			ApiService.setToken(token);
+			const response = await ApiService.resetAppSettings(user.distributorId);
+
+			if (response && response.success !== false) {
+				// Reset local app settings to default
+				setAppSettings(defaultAppSettings);
+				console.log("✅ App settings reset successfully");
+				return response;
+			}
+			return response || { success: false, error: "Unknown error" };
+		} catch (error) {
+			console.error("Error resetting app settings:", error);
+			return {
+				success: false,
+				error: error.message || "Failed to reset app settings",
+			};
 		}
 	};
 
@@ -235,12 +323,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				return { success: false, error: "No authentication token" };
 			}
 
-			console.log("➕ Adding product:", product);
 			ApiService.setToken(token);
-			
+
 			const response = await ApiService.addProduct(product);
-			console.log("Add product response:", response);
-			
+
 			if (response && response.success !== false) {
 				// Refresh data to get updated product list
 				await refreshData();
@@ -249,17 +335,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 			return response || { success: false, error: "Unknown error" };
 		} catch (error) {
 			console.error("Error adding product:", error);
-			return { success: false, error: error.message || "Failed to add product" };
+			return {
+				success: false,
+				error: error.message || "Failed to add product",
+			};
 		}
 	};
 
 	// Update product method
-	const updateProduct = async (productId: string, productData: any): Promise<any> => {
+	const updateProduct = async (
+		productId: string,
+		productData: any
+	): Promise<any> => {
 		try {
 			console.log("✏️ Updating product:", productId, productData);
 
 			ApiService.setToken(token);
-			const response = await ApiService.apiCall(`/products/${productId}`, "PUT", productData);
+			const response = await ApiService.apiCall(
+				`/products/${productId}`,
+				"PUT",
+				productData
+			);
 
 			if (response && response.success !== false) {
 				// Refresh the products list to get updated data
@@ -269,7 +365,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				console.error("Update product failed:", response);
 				return {
 					success: false,
-					error: response?.message || response?.error || "Failed to update product",
+					error:
+						response?.message || response?.error || "Failed to update product",
 				};
 			}
 		} catch (error) {
@@ -287,7 +384,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 			console.log("🗑️ Deleting product:", productId);
 
 			ApiService.setToken(token);
-			const response = await ApiService.apiCall(`/products/${productId}`, "DELETE");
+			const response = await ApiService.apiCall(
+				`/products/${productId}`,
+				"DELETE"
+			);
 
 			if (response && response.success !== false) {
 				// Refresh the products list after successful deletion
@@ -297,7 +397,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				console.error("Delete product failed:", response);
 				return {
 					success: false,
-					error: response?.message || response?.error || "Failed to delete product",
+					error:
+						response?.message || response?.error || "Failed to delete product",
 				};
 			}
 		} catch (error) {
@@ -315,7 +416,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	): Promise<boolean> => {
 		try {
 			if (!token) return false;
-			
+
 			ApiService.setToken(token);
 			const assignmentData = {
 				productId: product.id || product._id,
@@ -325,8 +426,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				minPrice: product.minPrice,
 			};
 
-			const response = await ApiService.assignProduct(deliveryManId, assignmentData);
-			
+			const response = await ApiService.assignProduct(
+				deliveryManId,
+				assignmentData
+			);
+
 			if (response && response.success !== false) {
 				await refreshData();
 				return true;
@@ -338,13 +442,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 		}
 	};
 
-	const toggleDeliveryManStatus = async (deliveryManId: string): Promise<boolean> => {
+	const updateAssignedProduct = async (
+		deliveryManId: string,
+		assignedProductId: string,
+		updateData: any
+	): Promise<boolean> => {
 		try {
 			if (!token) return false;
-			
+
 			ApiService.setToken(token);
-			const response = await ApiService.toggleDeliveryManStatusAPI(deliveryManId);
-			
+
+			const response = await ApiService.updateAssignedProduct(
+				deliveryManId,
+				assignedProductId,
+				updateData
+			);
+
+			if (response && response.success !== false) {
+				await refreshData();
+				return true;
+			}
+			return false;
+		} catch (error) {
+			console.error("Error updating assigned product:", error);
+			return false;
+		}
+	};
+
+	const toggleDeliveryManStatus = async (
+		deliveryManId: string
+	): Promise<boolean> => {
+		try {
+			if (!token) return false;
+
+			ApiService.setToken(token);
+			const response = await ApiService.toggleDeliveryManStatusAPI(
+				deliveryManId
+			);
+
 			if (response && response.success !== false) {
 				await refreshData();
 				return true;
@@ -359,7 +494,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	const addInspection = async (inspection: Inspection): Promise<any> => {
 		try {
 			console.log("📋 Sending inspection to API...");
-			
+
 			ApiService.setToken(token);
 			const response = await ApiService.createInspection(inspection);
 			console.log("API Response:", response);
@@ -382,7 +517,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				// Server responded with error status
 				return {
 					success: false,
-					error: error.response.data?.message || `Server error: ${error.response.status}`,
+					error:
+						error.response.data?.message ||
+						`Server error: ${error.response.status}`,
 				};
 			} else if (error.request) {
 				// Network error
@@ -423,10 +560,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 		updateProduct,
 		deleteProduct,
 		assignProductToDeliveryMan,
+		updateAssignedProduct,
 		addInspection,
 		updateProductStock,
 		refreshData,
-		toggleDeliveryManStatus	
+		toggleDeliveryManStatus,
+		updateAppSettings,
+		resetAppSettings,
 	};
 
 	return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

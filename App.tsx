@@ -30,6 +30,9 @@ import DeliveryManManagement from "./src/screens/admin/ManageDeliveryMenScreen";
 import DeliveryDashboard from "./src/screens/delivery/DeliveryDashboard";
 import NewInspection from "./src/screens/delivery/NewInspection";
 import DeliveryHistory from "./src/screens/delivery/DeliveryHistory";
+import { View } from "react-native";
+import LoadingIndicator from "./src/components/Loader";
+import AppSettingsScreen from "./src/screens/admin/AppSettings";
 
 const Stack = createStackNavigator();
 
@@ -38,7 +41,11 @@ function AppNavigator() {
 
 	// Show loading screen while checking authentication
 	if (loading) {
-		return null; // or a loading component
+		return (
+			<View>
+				<LoadingIndicator />
+			</View>
+		); // or a loading component
 	}
 
 	return (
@@ -141,6 +148,11 @@ function AppNavigator() {
 									name='ManageDeliveryMen'
 									component={DeliveryManManagement}
 									options={{ title: "Manage Delivery Men" }}
+								/>
+								<Stack.Screen
+									name='AppSettings'
+									component={AppSettingsScreen}
+									options={{ title: "General Settings" }}
 								/>
 							</>
 						)}

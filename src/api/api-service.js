@@ -166,6 +166,37 @@ class ApiService {
 		return { success: true, message: "Logged out successfully" };
 	}
 
+	///// App Settings
+	async getAppSettings(distributorId) {
+		try {
+			return await this.apiCall(`/app-settings/${distributorId}`);
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	}
+
+	async updateAppSettings(distributorId, settingsData) {
+		try {
+			return await this.apiCall(
+				`/app-settings/${distributorId}`,
+				"PUT",
+				settingsData
+			);
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	}
+
+	async resetAppSettings(distributorId) {
+		try {
+			return await this.apiCall(
+				`/app-settings/${distributorId}/reset`,
+				"POST"
+			);
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	}
 	// ==================== SUPER ADMIN ====================
 	async getSuperAdminStats() {
 		try {
@@ -300,6 +331,19 @@ class ApiService {
 		}
 	}
 
+	// NEW: Update assigned product
+	async updateAssignedProduct(deliveryManId, assignedProductId, updateData) {
+		try {
+			return await this.apiCall(
+				`/delivery-men/${deliveryManId}/assigned-products/${assignedProductId}`,
+				"PUT",
+				updateData
+			);
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	}
+
 	async updateProductStock(productId, stockData) {
 		try {
 			return await this.apiCall(
@@ -347,9 +391,12 @@ class ApiService {
 		}
 	}
 
-	async toggleDeliveryManStatusAPI (deliveryManId) {
+	async toggleDeliveryManStatusAPI(deliveryManId) {
 		try {
-			return await this.apiCall(`/delivery-men/${deliveryManId}/toggle-status`, "PUT");
+			return await this.apiCall(
+				`/delivery-men/${deliveryManId}/toggle-status`,
+				"PUT"
+			);
 		} catch (error) {
 			return { success: false, error: error.message };
 		}

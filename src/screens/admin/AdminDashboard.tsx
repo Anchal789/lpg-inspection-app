@@ -15,13 +15,14 @@ import { LineChart } from "react-native-chart-kit";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import ApiService from "../../api/api-service";
-
+import { exportInspectionsCSV } from "../../common-functions/ExportExcel";
+import LoadingIndicator from "../../components/Loader";
 const screenWidth = Dimensions.get("window").width;
 
 const AdminDashboard = () => {
 	const navigation = useNavigation();
-	const { inspections, deliveryMen, refreshData } = useData();
-	const { user, logout, token, isAuthenticated } = useAuth();
+	const { inspections, deliveryMen, refreshData, appSettings } = useData();
+	const { user, logout, token } = useAuth();
 	const [dashboardStats, setDashboardStats] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [chartData, setChartData] = useState({
@@ -110,6 +111,12 @@ const AdminDashboard = () => {
 			screen: "ManageDeliveryMen",
 			color: "#3B82F6",
 		},
+		{
+			title: "General Settings",
+			icon: "⚙️",
+			screen: "AppSettings",
+			color: "#E67E22",
+		},
 	];
 
 	const handleLogout = () => {
@@ -125,8 +132,8 @@ const AdminDashboard = () => {
 
 	if (loading) {
 		return (
-			<View style={styles.loadingContainer}>
-				<Text style={styles.loadingText}>Loading dashboard...</Text>
+			<View>
+				<LoadingIndicator />
 			</View>
 		);
 	}
@@ -149,7 +156,7 @@ const AdminDashboard = () => {
 				<View style={styles.statsContainer}>
 					<View style={styles.statCard}>
 						<Text style={styles.statNumber}>
-							{dashboardStats?.totalDeliveryMen}
+							{dashboardStats?.totalDeliveryMen || deliveryMen.length || 0}
 						</Text>
 						<Text style={styles.statLabel}>Delivery Men</Text>
 					</View>
@@ -183,6 +190,28 @@ const AdminDashboard = () => {
 								<Text style={styles.menuText}>{item.title}</Text>
 							</TouchableOpacity>
 						))}
+						<TouchableOpacity
+							style={[styles.menuItem, { backgroundColor: "#661CC9" }]}
+							onPress={async () => {
+								try {
+									const stamp = new Date().toISOString().slice(0, 10);
+									await exportInspectionsCSV({
+										inspections,
+										deliveryMen,
+										fileName: `inspections_${stamp}`,
+									});
+									Alert.alert("Export", "Export complete.");
+								} catch (e: any) {
+									Alert.alert(
+										"Export Failed",
+										e?.message || "Could not export."
+									);
+								}
+							}}
+						>
+							<Text style={styles.menuIcon}>📥</Text>
+							<Text style={styles.menuText}>Export Inspections</Text>
+						</TouchableOpacity>
 					</View>
 				</View>
 
@@ -221,12 +250,6 @@ const AdminDashboard = () => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#F8FAFC",
-	},
-	loadingContainer: {
-		flex: 1,
-		justifyContent: "center",
-		alignItems: "center",
 		backgroundColor: "#F8FAFC",
 	},
 	loadingText: {
@@ -305,6 +328,23 @@ const styles = StyleSheet.create({
 		color: "#6B7280",
 		textAlign: "center",
 	},
+	exportButtonContainer: {
+		alignItems: "center",
+		flexDirection: "row",
+		justifyContent: "center",
+		gap: 8,
+		width: "auto",
+		alignSelf: "center",
+		marginTop: 20,
+		backgroundColor: "#661CC9",
+		paddingVertical: 10,
+		paddingHorizontal: 20,
+		borderRadius: 8,
+	},
+	exportIcon: {
+		fontSize: 24,
+		color: "#FFFFFF",
+	},
 	chartContainer: {
 		backgroundColor: "#FFFFFF",
 		margin: 20,
@@ -342,6 +382,7 @@ const styles = StyleSheet.create({
 	menuItem: {
 		flex: 1,
 		minWidth: "45%",
+		maxWidth: "50%",
 		borderRadius: 12,
 		padding: 20,
 		alignItems: "center",

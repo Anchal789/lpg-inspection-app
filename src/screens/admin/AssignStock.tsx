@@ -13,6 +13,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useData } from "../../context/DataContext";
+import LoadingIndicator from "../../components/Loader";
 
 const AssignStock = () => {
 	const navigation = useNavigation();
@@ -100,19 +101,20 @@ const AssignStock = () => {
 	const renderProductItem = ({ item: p }) => {
 		const product = products.find((prod) => prod._id === p.productId);
 		const totalValue = p.price * (p.quantity || 0);
-		
+
 		return (
 			<View style={styles.productCard}>
 				<View style={styles.productHeader}>
 					<View style={styles.productIconContainer}>
-						<Ionicons name="cube-outline" size={24} color="#5563EB" />
+						<Ionicons name='cube-outline' size={24} color='#5563EB' />
 					</View>
 					<View style={styles.productNameContainer}>
 						<Text style={styles.productName}>
 							{product?.name || "Unknown Product"}
 						</Text>
 						<Text style={styles.productDate}>
-							Assigned on {new Date(p.assignedAt).toLocaleDateString("en-GB", {
+							Assigned on{" "}
+							{new Date(p.assignedAt).toLocaleDateString("en-GB", {
 								day: "2-digit",
 								month: "short",
 								year: "numeric",
@@ -132,13 +134,17 @@ const AssignStock = () => {
 						</View>
 						<View style={styles.priceItem}>
 							<Text style={styles.priceLabel}>Min Price</Text>
-							<Text style={styles.minPriceValue}>₹{p.minPrice.toLocaleString()}</Text>
+							<Text style={styles.minPriceValue}>
+								₹{p.minPrice.toLocaleString()}
+							</Text>
 						</View>
 					</View>
-					
+
 					<View style={styles.totalValueContainer}>
 						<Text style={styles.totalValueLabel}>Total Value</Text>
-						<Text style={styles.totalValue}>₹{totalValue.toLocaleString()}</Text>
+						<Text style={styles.totalValue}>
+							₹{totalValue.toLocaleString()}
+						</Text>
 					</View>
 				</View>
 			</View>
@@ -147,8 +153,8 @@ const AssignStock = () => {
 
 	if (loading) {
 		return (
-			<View style={styles.loadingContainer}>
-				<Text style={styles.loadingText}>Loading delivery men...</Text>
+			<View>
+				<LoadingIndicator />
 			</View>
 		);
 	}
@@ -166,7 +172,7 @@ const AssignStock = () => {
 				<FlatList
 					data={deliveryMen}
 					renderItem={renderDeliveryMan}
-					keyExtractor={(item) => item.id}
+					keyExtractor={(item) => item._id}
 					contentContainerStyle={styles.listContainer}
 					showsVerticalScrollIndicator={false}
 					refreshControl={
@@ -195,7 +201,7 @@ const AssignStock = () => {
 					<View style={styles.modalHeader}>
 						<View style={styles.modalHeaderContent}>
 							<View style={styles.deliveryManAvatar}>
-								<Ionicons name="person" size={24} color="#FFFFFF" />
+								<Ionicons name='person' size={24} color='#FFFFFF' />
 							</View>
 							<View style={styles.modalHeaderText}>
 								<Text style={styles.modalTitle}>
@@ -206,7 +212,7 @@ const AssignStock = () => {
 								</Text>
 							</View>
 						</View>
-						<TouchableOpacity 
+						<TouchableOpacity
 							onPress={() => setModalVisible(false)}
 							style={styles.closeButton}
 						>
@@ -217,19 +223,23 @@ const AssignStock = () => {
 					{/* Summary Cards */}
 					<View style={styles.summaryContainer}>
 						<View style={styles.summaryCard}>
-							<Ionicons name="cube-outline" size={24} color="#5563EB" />
+							<Ionicons name='cube-outline' size={24} color='#5563EB' />
 							<Text style={styles.summaryNumber}>
 								{selectedDeliveryMan?.assignedProducts?.length || 0}
 							</Text>
 							<Text style={styles.summaryLabel}>Products</Text>
 						</View>
 						<View style={styles.summaryCard}>
-							<Ionicons name="cash-outline" size={24} color="#10B981" />
+							<Ionicons name='cash-outline' size={24} color='#10B981' />
 							<Text style={styles.summaryNumber}>
-								₹{(selectedDeliveryMan?.assignedProducts?.reduce(
-									(sum, product) => sum + product.price * (product.quantity || 0),
-									0
-								) || 0).toLocaleString()}
+								₹
+								{(
+									selectedDeliveryMan?.assignedProducts?.reduce(
+										(sum, product) =>
+											sum + product.price * (product.quantity || 0),
+										0
+									) || 0
+								).toLocaleString()}
 							</Text>
 							<Text style={styles.summaryLabel}>Total Value</Text>
 						</View>
@@ -238,7 +248,7 @@ const AssignStock = () => {
 					{/* Products List */}
 					<View style={styles.productsListContainer}>
 						<Text style={styles.sectionTitle}>Assigned Products</Text>
-						
+
 						{selectedDeliveryMan?.assignedProducts?.length > 0 ? (
 							<FlatList
 								data={selectedDeliveryMan.assignedProducts}
@@ -249,8 +259,10 @@ const AssignStock = () => {
 							/>
 						) : (
 							<View style={styles.emptyProductsContainer}>
-								<Ionicons name="cube-outline" size={48} color="#D1D5DB" />
-								<Text style={styles.emptyProductsText}>No products assigned</Text>
+								<Ionicons name='cube-outline' size={48} color='#D1D5DB' />
+								<Text style={styles.emptyProductsText}>
+									No products assigned
+								</Text>
 								<Text style={styles.emptyProductsSubtext}>
 									This delivery person has no assigned products yet
 								</Text>
@@ -308,9 +320,9 @@ const styles = StyleSheet.create({
 	emptySubtext: { fontSize: 14, color: "#9CA3AF", marginTop: 6 },
 
 	// Enhanced Modal Styles
-	modalContainer: { 
-		flex: 1, 
-		backgroundColor: "#F8FAFC" 
+	modalContainer: {
+		flex: 1,
+		backgroundColor: "#F8FAFC",
 	},
 	modalHeader: {
 		backgroundColor: "#FFFFFF",
@@ -344,9 +356,9 @@ const styles = StyleSheet.create({
 	modalHeaderText: {
 		flex: 1,
 	},
-	modalTitle: { 
-		fontSize: 20, 
-		fontWeight: "700", 
+	modalTitle: {
+		fontSize: 20,
+		fontWeight: "700",
 		color: "#1F2937",
 		marginBottom: 2,
 	},

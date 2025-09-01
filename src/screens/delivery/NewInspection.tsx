@@ -19,6 +19,7 @@ import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const inspectionQuestions = [
 	{
@@ -213,6 +214,7 @@ const NewInspection = () => {
 
 	const [selectedLanguage, setSelectedLanguage] = useState("hindi");
 	const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+	const [showDatePicker, setShowDatePicker] = useState(false);
 	const currentLabels = labels[selectedLanguage];
 
 	const [formData, setFormData] = useState({
@@ -228,7 +230,7 @@ const NewInspection = () => {
 			price: number;
 			quantity: number;
 		}>,
-		surakshaHoseDueDate: "",
+		surakshaHoseDueDate: "" as string | Date | null,
 		hotplateExchange: false,
 		hotplateQuantity: 1,
 		portablePlatformQuantity: 1,
@@ -250,7 +252,7 @@ const NewInspection = () => {
 	const validateConsumerNumber = (number: string) => {
 		if (!number.trim()) return currentLabels.consumerNumberRequired;
 		if (!/^\d+$/.test(number)) return currentLabels.consumerNumberOnlyNumbers;
-		if (number.length < 5) return currentLabels.consumerNumberMinLength;
+		if (number.length < 4) return currentLabels.consumerNumberMinLength;
 		if (number.length > 16) return currentLabels.consumerNumberMaxLength;
 		return "";
 	};
@@ -267,6 +269,22 @@ const NewInspection = () => {
 		if (address.length < 3) return currentLabels.addressMinLength;
 		if (address.length > 150) return currentLabels.addressMaxLength;
 		return "";
+	};
+
+	const formatDate = (date: Date | null) => {
+		if (!date) return "Select Date";
+		return date.toLocaleDateString("en-GB", {
+			day: "2-digit",
+			month: "short",
+			year: "numeric",
+		});
+	};
+
+	const handleDateChange = (_event: any, date: Date | null) => {
+		if (date) {
+			setFormData({ ...formData, surakshaHoseDueDate: date });
+		}
+		setShowDatePicker(false);
 	};
 
 	const handleInputChange = (field: string, value: string) => {
@@ -400,13 +418,12 @@ const NewInspection = () => {
 	useEffect(() => {
 		setFormData((prev) => ({
 			...prev,
-			selectedProducts: deliveryMen.find((dm) => dm._id === user?.id)?.assignedProducts
-				?.filter((p) => p.quantity > 0)
-				.map((p) => ({ ...p, quantity: 0 })),
+			selectedProducts: deliveryMen
+				.find((dm) => dm._id === user?.id)
+				?.assignedProducts?.filter((p) => p.quantity > 0)
+				.map((p) => ({ ...p, quantity: 0, actualQuantity: p.quantity })),
 		}));
 	}, [products]);
-
-	console.log(deliveryMen.find((dm) => dm.id === user?.id)?.assignedProducts)
 
 	const getTotalAmount = () => {
 		const subtotal = formData.selectedProducts.reduce(
@@ -419,7 +436,6 @@ const NewInspection = () => {
 		const total = subtotal - hotplateDiscount - formData.otherDiscount;
 		return Math.max(0, total);
 	};
-
 
 	const handleSubmit = async () => {
 		// Validate all fields
@@ -464,7 +480,7 @@ const NewInspection = () => {
 			return;
 		}
 
-		setLoading(true);
+		// setLoading(true);
 		try {
 			// Get location
 			const { status } = await Location.requestForegroundPermissionsAsync();
@@ -480,9 +496,7 @@ const NewInspection = () => {
 
 			// Check product stock before submitting
 			for (const product of formData.selectedProducts) {
-				const availableProduct = products?.find(
-					(p) => p._id === product._id
-				);
+				const availableProduct = products?.find((p) => p._id === product._id);
 				if (availableProduct) {
 					const remainingStock =
 						availableProduct.quantity -
@@ -524,7 +538,14 @@ const NewInspection = () => {
 				products: formData.selectedProducts,
 				totalAmount: getTotalAmount(),
 				hotplateExchange: formData.hotplateExchange,
-				surakshaHoseDueDate: formData.surakshaHoseDueDate,
+				surakshaHoseDueDate: formData.surakshaHoseDueDate.toLocaleDateString(
+					"en-GB",
+					{
+						day: "2-digit",
+						month: "short",
+						year: "numeric",
+					}
+				),
 				otherDiscount: formData.otherDiscount,
 				hotplateQuantity: formData.hotplateQuantity,
 			};
@@ -764,17 +785,18 @@ const NewInspection = () => {
 								<Text style={styles.dateLabel}>
 									{currentLabels.surakshaHoseDueDate}
 								</Text>
-								<TextInput
-									style={styles.dateInput}
-									value={formData.surakshaHoseDueDate}
-									onChangeText={(date) =>
-										setFormData((prev) => ({
-											...prev,
-											surakshaHoseDueDate: date,
-										}))
-									}
-									placeholder='DD/MM/YYYY'
-								/>
+								<TouchableOpacity onPress={() => setShowDatePicker(true)}>
+									<Text style={styles.datePickerInput}>
+										{formatDate(formData.surakshaHoseDueDate as Date)}
+									</Text>
+								</TouchableOpacity>
+								{showDatePicker && (
+									<DateTimePicker
+										mode='date'
+										value={formData.surakshaHoseDueDate || new Date()}
+										onChange={handleDateChange}
+									/>
+								)}
 							</View>
 						)}
 
@@ -887,36 +909,38 @@ const NewInspection = () => {
 				<Text style={styles.sectionTitle}>Products</Text>
 				{/* Available Products */}
 				<Text style={styles.subsectionTitle}>Available Products</Text>
-				{formData?.selectedProducts?.map((product, index) => (
-					<View key={index} style={styles.productCard}>
-						<View style={styles.productInfo}>
-							<Text style={styles.productName}>{product.name}</Text>
-							<Text style={styles.productDetails}>
-								Price: ₹{product.price} | Min: ₹{product.minPrice} | Stock:{" "}
-								{products?.find((item) => item._id === product._id)
-									?.quantity || 0}
-							</Text>
+				{formData?.selectedProducts?.map((product, index) => {
+					return (
+						<View key={index} style={styles.productCard}>
+							<View style={styles.productInfo}>
+								<Text style={styles.productName}>{product.name}</Text>
+								<Text style={styles.productDetails}>
+									Price: ₹{product.price} | Min: ₹{product.minPrice} | Stock:{" "}
+									{product.actualQuantity}
+									{/* {console.log("products", products)} */}
+								</Text>
+							</View>
+							<View style={styles.productInputs}>
+								<TextInput
+									style={styles.smallInput}
+									placeholder='Qty'
+									value={product.quantity.toString() || 0}
+									keyboardType='numeric'
+									onChangeText={(qty) => {
+										if (qty) {
+											const quantity = Number.parseInt(qty);
+											setFormData((prev) => {
+												const updatedProducts = [...prev.selectedProducts];
+												updatedProducts[index] = { ...product, quantity };
+												return { ...prev, selectedProducts: updatedProducts };
+											});
+										}
+									}}
+								/>
+							</View>
 						</View>
-						<View style={styles.productInputs}>
-							<TextInput
-								style={styles.smallInput}
-								placeholder='Qty'
-								value={product.quantity.toString() || 0}
-								keyboardType='numeric'
-								onChangeText={(qty) => {
-									if (qty) {
-										const quantity = Number.parseInt(qty);
-										setFormData((prev) => {
-											const updatedProducts = [...prev.selectedProducts];
-											updatedProducts[index] = { ...product, quantity };
-											return { ...prev, selectedProducts: updatedProducts };
-										});
-									}
-								}}
-							/>
-						</View>
-					</View>
-				))}
+					);
+				})}
 			</View>
 			{/* Products Section */}
 			{formData.selectedProducts?.length > 0 && (
@@ -1115,6 +1139,14 @@ const styles = StyleSheet.create({
 		fontSize: 14,
 		width: 60,
 		textAlign: "center",
+	},
+	datePickerInput: {
+		backgroundColor: "#F8FAFC",
+		borderWidth: 1,
+		borderColor: "#E5E7EB",
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 15,
 	},
 	container: {
 		flex: 1,

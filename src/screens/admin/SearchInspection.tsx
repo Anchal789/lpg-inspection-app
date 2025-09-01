@@ -13,18 +13,18 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useData } from "../../context/DataContext";
-import { useAuth } from "../../context/AuthContext";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const SearchInspection = () => {
 	const navigation = useNavigation();
-	const { inspections, refreshData } = useData();
-	const { token } = useAuth();
+	const { inspections, refreshData, deliveryMen } = useData();
+	const [showDatePicker, setShowDatePicker] = useState(false);
 	const [showFilters, setShowFilters] = useState(false);
 	const [filters, setFilters] = useState({
 		consumerName: "",
 		consumerNumber: "",
 		deliveryManName: "",
-		date: "",
+		date: null,
 	});
 	const [loading, setLoading] = useState(false);
 
@@ -56,9 +56,29 @@ const SearchInspection = () => {
 				.toLowerCase()
 				.includes(filters.consumerNumber.toLowerCase());
 		const dateMatch =
-			!filters.date || inspection.createdAt.includes(filters.date);
+			!filters.date ||
+			new Date(inspection.createdAt)
+				.toLocaleDateString("en-GB", {
+					day: "2-digit",
+					month: "short",
+					year: "numeric",
+				})
+				.includes(
+					filters.date.toLocaleDateString("en-GB", {
+						day: "2-digit",
+						month: "short",
+						year: "numeric",
+					})
+			);
+		
+		const deliveryMenName = filters.deliveryManName;
+		const deliveryManNameMatch =
+			!filters.deliveryManName || deliveryMen.find(
+				(deliveryMan) =>
+					deliveryMan.name.toLowerCase() === deliveryMenName.toLowerCase()
+			)
 
-		return nameMatch && dateMatch && numberMatch;
+		return nameMatch && dateMatch && numberMatch && deliveryManNameMatch;
 	});
 
 	const clearFilters = () => {
@@ -71,7 +91,7 @@ const SearchInspection = () => {
 	};
 
 	const renderInspection = ({ item }: { item: any }) => {
-    const consumer = item.consumer;
+		const consumer = item.consumer;
 		return (
 			<TouchableOpacity
 				style={styles.inspectionCard}
@@ -201,15 +221,31 @@ const SearchInspection = () => {
 							</View>
 
 							<View style={styles.inputGroup}>
-								<Text style={styles.inputLabel}>Date (YYYY-MM-DD)</Text>
-								<TextInput
-									style={styles.input}
-									value={filters.date}
-									onChangeText={(text) =>
-										setFilters({ ...filters, date: text })
-									}
-									placeholder='2024-01-15'
-								/>
+								<Text style={styles.inputLabel}>Date</Text>
+								<TouchableOpacity onPress={() => setShowDatePicker(true)}>
+									<Text style={styles.datePickerInput}>
+										{filters.date
+											? filters.date.toLocaleDateString("en-GB", {
+													day: "2-digit",
+													month: "short",
+													year: "numeric",
+											  })
+											: "Select Date"}
+									</Text>
+								</TouchableOpacity>
+
+								{showDatePicker && (
+									<DateTimePicker
+										mode='date'
+										value={filters.date || new Date()} // always pass Date object
+										onChange={(_event, date) => {
+											if (date) {
+												setFilters({ ...filters, date }); // save raw Date object
+											}
+											setShowDatePicker(false);
+										}}
+									/>
+								)}
 							</View>
 
 							<View style={styles.modalButtons}>
@@ -273,6 +309,14 @@ const styles = StyleSheet.create({
 		fontSize: 18,
 		fontWeight: "bold",
 		color: "#1F2937",
+	},
+	datePickerInput: {
+		backgroundColor: "#F8FAFC",
+		borderWidth: 1,
+		borderColor: "#E5E7EB",
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 15,
 	},
 	filterButton: {
 		backgroundColor: "#2563EB",

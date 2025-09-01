@@ -12,6 +12,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useData } from "../../context/DataContext";
+import LoadingIndicator from "../../components/Loader";
 
 const DeliveryManManagement = () => {
 	const navigation = useNavigation();
@@ -207,9 +208,8 @@ const DeliveryManManagement = () => {
 
 	if (loading) {
 		return (
-			<View style={styles.loadingContainer}>
-				<ActivityIndicator size='large' color='#5563EB' />
-				<Text style={styles.loadingText}>Loading delivery men...</Text>
+			<View>
+				<LoadingIndicator />
 			</View>
 		);
 	}
