@@ -95,7 +95,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	const [products, setProducts] = useState<Product[]>([]);
 	const [deliveryMen, setDeliveryMen] = useState<DeliveryMan[]>([]);
 	const [inspections, setInspections] = useState<Inspection[]>([]);
-	const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
+	const [appSettings, setAppSettings] =
+		useState<AppSettings>(defaultAppSettings);
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
@@ -159,16 +160,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 				apiCalls.push(
 					ApiService.getAppSettings(user.distributorId).catch((error) => {
 						console.error("App settings API error:", error);
-						return { success: false, error: error.message, data: { appSettings: defaultAppSettings } };
+						return {
+							success: false,
+							error: error.message,
+							data: { appSettings: defaultAppSettings },
+						};
 					})
 				);
 			} else {
-				apiCalls.push(Promise.resolve({ success: false, data: { appSettings: defaultAppSettings } }));
+				apiCalls.push(
+					Promise.resolve({
+						success: false,
+						data: { appSettings: defaultAppSettings },
+					})
+				);
 			}
 
 			// Execute all API calls in parallel
-			const [productsResponse, deliveryMenResponse, inspectionsResponse, appSettingsResponse] =
-				await Promise.all(apiCalls);
+			const [
+				productsResponse,
+				deliveryMenResponse,
+				inspectionsResponse,
+				appSettingsResponse,
+			] = await Promise.all(apiCalls);
 
 			// Handle products response
 			if (productsResponse?.success && productsResponse.data) {
@@ -209,10 +223,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 
 			// Handle app settings response
 			if (appSettingsResponse?.success && appSettingsResponse.data) {
-				const settingsData = appSettingsResponse.data.appSettings || appSettingsResponse.data;
+				const settingsData =
+					appSettingsResponse.data.appSettings || appSettingsResponse.data;
 				setAppSettings(settingsData);
 			} else {
-				console.log("❌ App settings fetch failed:", appSettingsResponse?.error);
+				console.log(
+					"❌ App settings fetch failed:",
+					appSettingsResponse?.error
+				);
 				setAppSettings(defaultAppSettings);
 			}
 
@@ -267,18 +285,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 		}
 	};
 
-	const updateAppSettings = async (settingsData: Partial<AppSettings>): Promise<any> => {
+	const updateAppSettings = async (
+		settingsData: Partial<AppSettings>
+	): Promise<any> => {
 		try {
 			if (!token || !user?.distributorId) {
-				return { success: false, error: "No authentication token or distributor ID" };
+				return {
+					success: false,
+					error: "No authentication token or distributor ID",
+				};
 			}
 
 			ApiService.setToken(token);
-			const response = await ApiService.updateAppSettings(user.distributorId, settingsData);
+			const response = await ApiService.updateAppSettings(
+				user.distributorId,
+				settingsData
+			);
 
 			if (response && response.success !== false) {
 				// Update local app settings state
-				setAppSettings(prev => ({ ...prev, ...settingsData }));
+				setAppSettings((prev) => ({ ...prev, ...settingsData }));
 				console.log("✅ App settings updated successfully");
 				return response;
 			}
@@ -295,7 +321,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	const resetAppSettings = async (): Promise<any> => {
 		try {
 			if (!token || !user?.distributorId) {
-				return { success: false, error: "No authentication token or distributor ID" };
+				return {
+					success: false,
+					error: "No authentication token or distributor ID",
+				};
 			}
 
 			ApiService.setToken(token);
@@ -494,38 +523,70 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
 	const addInspection = async (inspection: Inspection): Promise<any> => {
 		try {
 			console.log("📋 Sending inspection to API...");
+			console.log("Inspection data:", JSON.stringify(inspection, null, 2));
+
+			if (!token) {
+				throw new Error("No authentication token available");
+			}
 
 			ApiService.setToken(token);
 			const response = await ApiService.createInspection(inspection);
 			console.log("API Response:", response);
 
-			if (response && response.success !== false) {
+			// Check response structure more carefully
+			if (response && response.success === true) {
+				console.log("✅ Inspection submitted successfully");
 				await refreshData();
-				return { success: true };
-			} else {
+				return { success: true, data: response.data };
+			} else if (response && response.success === false) {
 				// Handle API returning success: false
+				console.log("❌ API returned unsuccessful response:", response.error);
 				return {
 					success: false,
-					error: response?.message || "API returned unsuccessful response",
+					error:
+						response.error ||
+						response.message ||
+						"API returned unsuccessful response",
+				};
+			} else {
+				// Handle unexpected response format
+				console.log("⚠️ Unexpected response format:", response);
+				return {
+					success: false,
+					error: "Unexpected response format from server",
 				};
 			}
 		} catch (error) {
 			console.error("Error adding inspection:", error);
 
-			// Differentiate between different types of errors
-			if (error.response) {
-				// Server responded with error status
+			// More detailed error handling
+			if (error.name === "TypeError" && error.message.includes("fetch")) {
 				return {
 					success: false,
-					error:
-						error.response.data?.message ||
-						`Server error: ${error.response.status}`,
+					error: "Network error - please check your internet connection",
+				};
+			} else if (error.name === "AbortError") {
+				return {
+					success: false,
+					error: "Request timed out - please try again",
+				};
+			} else if (error.response) {
+				// Server responded with error status
+				const errorMessage =
+					error.response.data?.message ||
+					error.response.data?.error ||
+					`Server error: ${error.response.status}`;
+				console.log("Server error response:", error.response.data);
+				return {
+					success: false,
+					error: errorMessage,
 				};
 			} else if (error.request) {
-				// Network error
+				// Network error - request was made but no response received
+				console.log("Network error - no response received");
 				return {
 					success: false,
-					error: "Network error - please check your connection",
+					error: "Network error - no response from server",
 				};
 			} else {
 				// Other error

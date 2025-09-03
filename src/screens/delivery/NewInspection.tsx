@@ -20,6 +20,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import LoadingIndicator from "../../components/Loader";
+import ApiService from "../../api/api-service";
 
 const inspectionQuestions = [
 	{
@@ -202,15 +204,9 @@ const labels = {
 
 const NewInspection = () => {
 	const navigation = useNavigation();
-	const {
-		addInspection,
-		products,
-		appSettings,
-		updateProductStock,
-		deliveryMen,
-		refreshData,
-	} = useData();
-	const { user, token } = useAuth();
+	const { addInspection, products, appSettings, deliveryMen, refreshData } =
+		useData();
+	const { user } = useAuth();
 
 	const [selectedLanguage, setSelectedLanguage] = useState("hindi");
 	const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
@@ -331,7 +327,7 @@ const NewInspection = () => {
 			setFormData((prev) => ({
 				...prev,
 				selectedProducts: [
-					...prev.selectedProducts.filter((p) => !p.name.includes("hotplate")),
+					...prev.selectedProducts.filter((p) => !p?.id?.includes("hotplate")),
 					hotplateProduct,
 				],
 			}));
@@ -348,7 +344,7 @@ const NewInspection = () => {
 			setFormData((prev) => ({
 				...prev,
 				selectedProducts: [
-					...prev.selectedProducts.filter((p) => !p.name.includes("Platform")),
+					...prev.selectedProducts.filter((p) => !p?.id?.includes("platform")),
 					platformProduct,
 				],
 			}));
@@ -359,7 +355,7 @@ const NewInspection = () => {
 			setFormData((prev) => ({
 				...prev,
 				selectedProducts: prev.selectedProducts.filter(
-					(p) => !p.name.includes("hotplate")
+					(p) => !p?.id?.includes("hotplate")
 				),
 			}));
 		}
@@ -368,7 +364,7 @@ const NewInspection = () => {
 			setFormData((prev) => ({
 				...prev,
 				selectedProducts: prev.selectedProducts.filter(
-					(p) => !p.name.includes("Platform")
+					(p) => !p?.id?.includes("platform")
 				),
 			}));
 		}
@@ -480,9 +476,8 @@ const NewInspection = () => {
 			return;
 		}
 
-		// setLoading(true);
+		setLoading(true);
 		try {
-			// Get location
 			const { status } = await Location.requestForegroundPermissionsAsync();
 			let location = { latitude: 0, longitude: 0 };
 
@@ -496,34 +491,64 @@ const NewInspection = () => {
 
 			// Check product stock before submitting
 			for (const product of formData.selectedProducts) {
-				const availableProduct = products?.find((p) => p._id === product._id);
-				if (availableProduct) {
-					const remainingStock =
-						availableProduct.quantity -
-						(availableProduct.soldQuantity || 0) -
-						(availableProduct.assignedQuantity || 0);
-					if (product.quantity > remainingStock) {
-						Alert.alert(
-							currentLabels.insufficientStock,
-							currentLabels.onlyUnitsAvailable
-								.replace("{count}", remainingStock)
-								.replace("{product}", product.name),
-							[{ text: currentLabels.ok }]
-						);
-						return;
+				if (product.quantity > 0) {
+					const availableProduct = products?.find((p) => p._id === product._id);
+					if (availableProduct) {
+						const remainingStock =
+							availableProduct.quantity -
+							(availableProduct.soldQuantity || 0) -
+							(availableProduct.assignedQuantity || 0);
+						if (product.quantity > remainingStock) {
+							Alert.alert(
+								currentLabels.insufficientStock,
+								currentLabels.onlyUnitsAvailable
+									.replace("{count}", remainingStock.toString())
+									.replace("{product}", product.name),
+								[{ text: currentLabels.ok }]
+							);
+							setLoading(false);
+							return;
+						}
 					}
 				}
 			}
 
-			// Prepare products array for backend (matching old structure)
-			const productsForBackend = formData.selectedProducts.map((product) => ({
-				productId: product._id || product.id,
-				name: product.name,
-				quantity: product.quantity || 1,
-				price: product.price,
-				// Add any other product fields your old backend expects
-			}));
+			let uploadedImageUrl = null;
 
+			if (formData.image) {
+				try {
+
+					// Upload with proper timeout and error handling
+					const uploadResponse = await Promise.race([
+						ApiService.uploadImage(formData.image), // Pass URI directly
+						new Promise((_, reject) =>
+							setTimeout(
+								() => reject(new Error("Upload timeout after 30 seconds")),
+								30000
+							)
+						),
+					]);
+
+					if (uploadResponse.success && uploadResponse.data?.url) {
+						uploadedImageUrl = uploadResponse.data.url;
+					} else {
+						throw new Error(
+							uploadResponse.error || "Upload failed - no URL returned"
+						);
+					}
+				} catch (imageError) {
+					console.error("❌ Image upload failed:", imageError);
+					Alert.alert(
+						currentLabels.error,
+						`Failed to upload image: ${imageError.message}`,
+						[{ text: currentLabels.ok }]
+					);
+					setLoading(false);
+					return;
+				}
+			}
+
+			// Prepare inspection data
 			const inspection = {
 				id: Date.now().toString(),
 				consumerName: formData.consumerName,
@@ -534,25 +559,36 @@ const NewInspection = () => {
 				deliveryManName: user?.name || "",
 				date: new Date().toISOString(),
 				answers: formData.answers,
-				images: formData.images, // Make sure this is an array
-				products: formData.selectedProducts,
+				images: uploadedImageUrl ? [uploadedImageUrl] : [],
+				products: formData.selectedProducts.filter((p) => p.quantity > 0),
 				totalAmount: getTotalAmount(),
 				hotplateExchange: formData.hotplateExchange,
-				surakshaHoseDueDate: formData.surakshaHoseDueDate.toLocaleDateString(
-					"en-GB",
-					{
-						day: "2-digit",
-						month: "short",
-						year: "numeric",
-					}
-				),
+				surakshaHoseDueDate: formData.surakshaHoseDueDate
+					? formData.surakshaHoseDueDate instanceof Date
+						? formData.surakshaHoseDueDate.toLocaleDateString("en-GB", {
+								day: "2-digit",
+								month: "short",
+								year: "numeric",
+						  })
+						: formData.surakshaHoseDueDate
+					: "",
 				otherDiscount: formData.otherDiscount,
 				hotplateQuantity: formData.hotplateQuantity,
+				location,
 			};
 
-			const result = await addInspection(inspection);
+			// Submit inspection with timeout
+			const submissionResponse = await Promise.race([
+				addInspection(inspection),
+				new Promise((_, reject) =>
+					setTimeout(
+						() => reject(new Error("Submission timeout after 30 seconds")),
+						30000
+					)
+				),
+			]);
 
-			if (result.success) {
+			if (submissionResponse && submissionResponse.success) {
 				Alert.alert(
 					currentLabels.success,
 					currentLabels.inspectionSubmittedSuccessfully,
@@ -562,7 +598,7 @@ const NewInspection = () => {
 			} else {
 				Alert.alert(
 					currentLabels.error,
-					result.error || currentLabels.failedToSubmitInspection,
+					submissionResponse?.error || currentLabels.failedToSubmitInspection,
 					[{ text: currentLabels.ok }]
 				);
 			}
@@ -579,6 +615,13 @@ const NewInspection = () => {
 		}
 	};
 
+	if (loading) {
+		return (
+			<View>
+				<LoadingIndicator />
+			</View>
+		);
+	}
 	return (
 		<ScrollView style={styles.container}>
 			{/* Language Selector */}
@@ -763,7 +806,7 @@ const NewInspection = () => {
 								style={[
 									styles.radioButton,
 									formData.answers[index] === "no" &&
-										styles.radioButtonSelected,
+										styles.radioButtonNotSelected,
 								]}
 								onPress={() => handleAnswerChange(index, "no")}
 							>
@@ -917,7 +960,6 @@ const NewInspection = () => {
 								<Text style={styles.productDetails}>
 									Price: ₹{product.price} | Min: ₹{product.minPrice} | Stock:{" "}
 									{product.actualQuantity}
-									{/* {console.log("products", products)} */}
 								</Text>
 							</View>
 							<View style={styles.productInputs}>
@@ -1301,6 +1343,10 @@ const styles = StyleSheet.create({
 	radioButtonSelected: {
 		backgroundColor: "#10B981",
 		borderColor: "#10B981",
+	},
+	radioButtonNotSelected: {
+		backgroundColor: "#FF9099",
+		borderColor: "#FF9099",
 	},
 	radioText: {
 		fontSize: 14,

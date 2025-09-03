@@ -36,7 +36,6 @@ const DeliveryDashboard = () => {
 		fetchDashboardData();
 	}, []);
 
-	// console.log(inspections.inspections);
 	const fetchDashboardData = async () => {
 		try {
 			setLoading(true);

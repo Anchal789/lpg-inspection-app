@@ -187,8 +187,6 @@ const AddProduct = () => {
         status: "active"
       }
 
-      console.log("Sending product payload:", newProduct)
-
       const result = await addProduct(newProduct)
       
       if (result && result.success !== false) {
@@ -240,8 +238,6 @@ const AddProduct = () => {
         type: editingProduct.type || "other",
         status: "active"
       }
-
-      console.log("Updating product with payload:", updatedProduct)
 
       const result = await updateProduct(editingProduct.id || editingProduct._id, updatedProduct)
       

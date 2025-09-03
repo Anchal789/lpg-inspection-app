@@ -156,7 +156,7 @@ const InspectionDetails = () => {
             {inspection.images.map((image: string, index: number) => (
               <Image
                 key={index}
-                source={{ uri: image || "/placeholder.svg?height=150&width=150" }}
+                source={{ uri: image?.imageUrl || "/placeholder.svg?height=150&width=150" }}
                 style={styles.image}
               />
             ))}

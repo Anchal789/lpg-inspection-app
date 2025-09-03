@@ -15,8 +15,8 @@ import { LineChart } from "react-native-chart-kit";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import ApiService from "../../api/api-service";
-import { exportInspectionsCSV } from "../../common-functions/ExportExcel";
 import LoadingIndicator from "../../components/Loader";
+import { exportInspectionsViaApiService, handleInlineExport } from "../../common-functions/ExportExcel";
 const screenWidth = Dimensions.get("window").width;
 
 const AdminDashboard = () => {
@@ -194,18 +194,17 @@ const AdminDashboard = () => {
 							style={[styles.menuItem, { backgroundColor: "#661CC9" }]}
 							onPress={async () => {
 								try {
-									const stamp = new Date().toISOString().slice(0, 10);
-									await exportInspectionsCSV({
+									const result = await handleInlineExport(
 										inspections,
 										deliveryMen,
-										fileName: `inspections_${stamp}`,
-									});
-									Alert.alert("Export", "Export complete.");
-								} catch (e: any) {
-									Alert.alert(
-										"Export Failed",
-										e?.message || "Could not export."
+										token || "",
 									);
+
+									if (result.success) {
+										Alert.alert("Success", result.message);
+									}
+								} catch (error) {
+									Alert.alert("Export Error", error.message);
 								}
 							}}
 						>

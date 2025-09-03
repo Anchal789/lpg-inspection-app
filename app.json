@@ -1,15 +1,15 @@
 {
-	"expo": {
-		"name": "Safe Kitchen",
-		"slug": "lpg-inspection-app",
-		"icon": "./assets/logo.png",
-		"extra": {
-			"eas": {
-				"projectId": "76d91ff7-6822-446e-b882-fce60304d89c"
-			}
-		},
-		"android": {
-			"package": "com.anchaldeshmukh789.lpginspectionapp"
-		}
-	}
+  "expo": {
+    "name": "Safe Kitchen",
+    "slug": "safe-kitchen",
+    "icon": "./assets/logo.png",
+    "extra": {
+      "eas": {
+        "projectId": "94550e02-d224-43a7-b43b-10bf5ec0f875"
+      }
+    },
+    "android": {
+      "package": "com.anchaldeshmukh789.lpginspectionapp"
+    }
+  }
 }

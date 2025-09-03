@@ -98,7 +98,6 @@ const SuperAdminDashboard = () => {
 							const response = await ApiService.approveDistributor(requestId);
 							if (response.success) {
 								Alert.alert("Success", "Distributor approved successfully!");
-								console.log("response", response);
 								fetchDashboardData(); // Refresh data
 							} else {
 								Alert.alert(

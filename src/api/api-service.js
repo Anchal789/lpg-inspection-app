@@ -1,7 +1,7 @@
 // PRODUCTION API Service - Replace with your actual Railway/Render URL
-// const API_BASE_URL = "http://10.0.2.2:3000/api"; // CHANGE THIS TO YOUR DEPLOYED URL
+const API_BASE_URL = "http://10.0.2.2:3000/api"; // CHANGE THIS TO YOUR DEPLOYED URL
 // const API_BASE_URL = "http://localhost:3000/api" // CHANGE THIS TO YOUR DEPLOYED URL
-const API_BASE_URL = "https://lpg-inspection-backend-production.up.railway.app/api" // CHANGE THIS TO YOUR DEPLOYED URL
+// const API_BASE_URL = "https://lpg-inspection-backend-production.up.railway.app/api" // CHANGE THIS TO YOUR DEPLOYED URL
 
 class ApiService {
 	constructor() {
@@ -189,10 +189,7 @@ class ApiService {
 
 	async resetAppSettings(distributorId) {
 		try {
-			return await this.apiCall(
-				`/app-settings/${distributorId}/reset`,
-				"POST"
-			);
+			return await this.apiCall(`/app-settings/${distributorId}/reset`, "POST");
 		} catch (error) {
 			return { success: false, error: error.message };
 		}
@@ -410,6 +407,25 @@ class ApiService {
 		}
 	}
 
+	// Add this method to your ApiService class in api-service.js
+	async exportInspections(
+		inspections,
+		deliveryMen,
+		fileName = "inspections_export"
+	) {
+		try {
+			const exportData = {
+				inspections,
+				deliveryMen: deliveryMen || [],
+				fileName,
+				timestamp: new Date().toISOString(),
+			};
+			return await this.apiCall("/export/csv", "POST", exportData);
+		} catch (error) {
+			return { success: false, error: error.message };
+		}
+	}
+
 	// ==================== DASHBOARD ====================
 	async getDashboardStats(distributorId) {
 		try {
@@ -465,26 +481,44 @@ class ApiService {
 	}
 
 	// ==================== IMAGE UPLOAD ====================
-	async uploadImage(imageUri, inspectionId) {
+	async uploadImage(imageUri, inspectionId = null) {
 		try {
+			console.log(API_BASE_URL);
 			const formData = new FormData();
-			formData.append("image", {
-				uri: imageUri,
-				type: "image/jpeg",
-				name: `inspection_${inspectionId}_${Date.now()}.jpg`,
-			});
-			formData.append("inspectionId", inspectionId);
 
-			const response = await fetch(`${this.baseURL}/upload/image`, {
+			// Extract file extension
+			const fileExtension = imageUri.split(".").pop() || "jpg";
+			const fileName = inspectionId
+				? `inspection_${inspectionId}_${Date.now()}.${fileExtension}`
+				: `upload_${Date.now()}.${fileExtension}`;
+
+			// Create proper file object for React Native
+			const fileObject = {
+				uri: imageUri,
+				type: `image/${fileExtension === "jpg" ? "jpeg" : fileExtension}`,
+				name: fileName,
+			};
+
+			// Important: Use "file" as the field name (matches backend expectation)
+			formData.append("file", fileObject);
+
+			if (inspectionId) {
+				formData.append("inspectionId", inspectionId);
+			}
+
+			// Use fetch directly for file uploads (not apiCall)
+			const response = await fetch(`${API_BASE_URL}/upload/single`, {
 				method: "POST",
 				body: formData,
 				headers: {
 					Authorization: `Bearer ${this.token}`,
+					// Don't set Content-Type - let browser set it with boundary
 				},
 			});
 
 			if (!response.ok) {
-				throw new Error(`Upload failed: ${response.status}`);
+				const errorText = await response.text();
+				throw new Error(`Upload failed: ${response.status} - ${errorText}`);
 			}
 
 			return await response.json();
