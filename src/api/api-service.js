@@ -1,7 +1,7 @@
 // PRODUCTION API Service - Replace with your actual Railway/Render URL
-// const API_BASE_URL = "http://10.0.2.2:3000/api"; // CHANGE THIS TO YOUR DEPLOYED URL
+const API_BASE_URL = "http://10.0.2.2:3000/api"; // CHANGE THIS TO YOUR DEPLOYED URL
 // const API_BASE_URL = "http://localhost:3000/api" // CHANGE THIS TO YOUR DEPLOYED URL
-const API_BASE_URL = "https://lpg-inspection-backend-production.up.railway.app/api" // CHANGE THIS TO YOUR DEPLOYED URL
+// const API_BASE_URL = "https://lpg-inspection-backend-production.up.railway.app/api" // CHANGE THIS TO YOUR DEPLOYED URL
 
 class ApiService {
 	constructor() {

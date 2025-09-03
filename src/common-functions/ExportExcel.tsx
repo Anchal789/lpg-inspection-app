@@ -60,7 +60,7 @@ function flattenInspection(row: AnyRecord, deliveryMenMap: Record<string, string
     TotalAmount: row.totalAmount ?? "",
     PassedQuestions: row.passedQuestions ?? "",
     FailedQuestions: row.failedQuestions ?? "",
-    ImagesCount: imagesCount,
+    Images: row?.images?.[0]?.imageUrl,
     Products: productsSummary,
     Latitude: row.location?.latitude ?? "",
     Longitude: row.location?.longitude ?? "",
