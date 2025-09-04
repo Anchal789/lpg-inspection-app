@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
 	View,
 	Text,
@@ -10,13 +10,16 @@ import {
 	Dimensions,
 	Alert,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { LineChart } from "react-native-chart-kit";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import ApiService from "../../api/api-service";
 import LoadingIndicator from "../../components/Loader";
-import { exportInspectionsViaApiService, handleInlineExport } from "../../common-functions/ExportExcel";
+import {
+	exportInspectionsViaApiService,
+	handleInlineExport,
+} from "../../common-functions/ExportExcel";
 const screenWidth = Dimensions.get("window").width;
 
 const AdminDashboard = () => {
@@ -126,9 +129,11 @@ const AdminDashboard = () => {
 		]);
 	};
 
-	useEffect(() => {
-		fetchDashboardData();
-	}, []);
+	useFocusEffect(
+		useCallback(() => {
+			fetchDashboardData();
+		}, [])
+	);
 
 	if (loading) {
 		return (
@@ -197,7 +202,7 @@ const AdminDashboard = () => {
 									const result = await handleInlineExport(
 										inspections,
 										deliveryMen,
-										token || "",
+										token || ""
 									);
 
 									if (result.success) {

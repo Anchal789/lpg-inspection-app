@@ -261,7 +261,15 @@ const DeliveryDashboard = () => {
 										Consumer Number: {inspection?.consumer.consumerNumber}
 									</Text>
 									<Text style={styles.activitySubtitle}>
-										Date: {new Date(inspection.createdAt).toLocaleDateString()}{" "}
+										Date:{" "}
+										{new Date(inspection.createdAt).toLocaleDateString(
+											"en-GB",
+											{
+												day: "2-digit",
+												month: "short",
+												year: "numeric",
+											}
+										)}{" "}
 										• ₹{inspection.totalAmount}
 									</Text>
 								</View>

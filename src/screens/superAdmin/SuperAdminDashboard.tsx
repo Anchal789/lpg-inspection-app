@@ -18,9 +18,12 @@ import { Ionicons } from "@expo/vector-icons";
 import ApiService from "../../api/api-service";
 import { useAuth } from "../../context/AuthContext";
 import LoadingIndicator from "../../components/Loader";
+import { exportInspectionsViaApiService } from "../../common-functions/ExportExcel"; // Import your existing export function
+import { useData } from "../../context/DataContext";
 
 const SuperAdminDashboard = () => {
-	const { logout } = useAuth();
+	const { logout, token } = useAuth();
+	const { inspections } = useData();
 
 	const [stats, setStats] = useState({
 		totalDistributors: 0,
@@ -35,6 +38,18 @@ const SuperAdminDashboard = () => {
 	const [selectedRequest, setSelectedRequest] = useState(null);
 	const [showRejectModal, setShowRejectModal] = useState(false);
 	const [rejectReason, setRejectReason] = useState("");
+
+	// New states for distributor-specific data
+	const [selectedDistributor, setSelectedDistributor] = useState(null);
+	const [distributorData, setDistributorData] = useState({
+		products: [],
+		deliveryMen: [],
+		inspections: [],
+		appSettings: null,
+	});
+	const [showDistributorModal, setShowDistributorModal] = useState(false);
+	const [loadingDistributorData, setLoadingDistributorData] = useState(false);
+	const [exportingDistributorId, setExportingDistributorId] = useState(null);
 
 	useEffect(() => {
 		fetchDashboardData();
@@ -85,6 +100,13 @@ const SuperAdminDashboard = () => {
 		setRefreshing(false);
 	};
 
+	const handleViewDistributorData = (distributor) => {
+		setSelectedDistributor(distributor);
+		setShowDistributorModal(true);
+		// Fetch data for this distributor
+		fetchDistributorData(distributor._id || distributor.distributorId);
+	};
+
 	const handleApproveDistributor = async (requestId) => {
 		Alert.alert(
 			"Approve Distributor",
@@ -116,6 +138,205 @@ const SuperAdminDashboard = () => {
 				},
 			]
 		);
+	};
+
+	// New function to fetch distributor-specific data
+	const fetchDistributorData = async (distributorId) => {
+		try {
+			setLoadingDistributorData(true);
+
+			if (!token) {
+				Alert.alert("Error", "Authentication token not available");
+				return;
+			}
+
+			// Set token for API service
+			ApiService.setToken(token);
+
+			// Prepare API calls with proper parameters
+			const apiCalls = [];
+
+			// Get products - use distributorId parameter
+			apiCalls.push(
+				ApiService.getProducts(distributorId).catch((error) => {
+					console.error("Products API error:", error);
+					return { success: false, error: error.message, data: [] };
+				})
+			);
+
+			// Get delivery men - use distributorId parameter
+			apiCalls.push(
+				ApiService.getDeliveryMen(distributorId).catch((error) => {
+					console.error("Delivery men API error:", error);
+					return { success: false, error: error.message, data: [] };
+				})
+			);
+
+			// Get inspections - try with distributorId (check if your API supports this)
+			apiCalls.push(
+				ApiService.getInspections(distributorId).catch((error) => {
+					console.error("Inspections API error:", error);
+					// If distributor-specific inspections fail, try general inspections
+					return ApiService.getInspections().catch((fallbackError) => {
+						console.error("General inspections API error:", fallbackError);
+						return { success: false, error: fallbackError.message, data: [] };
+					});
+				})
+			);
+
+			// Get app settings - use distributorId parameter
+			apiCalls.push(
+				ApiService.getAppSettings(distributorId).catch((error) => {
+					console.error("App settings API error:", error);
+					return {
+						success: false,
+						error: error.message,
+						data: { appSettings: null },
+					};
+				})
+			);
+
+			// Execute all API calls in parallel
+			const [
+				productsResponse,
+				deliveryMenResponse,
+				inspectionsResponse,
+				appSettingsResponse,
+			] = await Promise.all(apiCalls);
+
+			// Handle products response
+			const products =
+				productsResponse?.success && productsResponse.data
+					? Array.isArray(productsResponse.data)
+						? productsResponse.data
+						: productsResponse.data.products || []
+					: [];
+
+			// Handle delivery men response
+			const deliveryMen =
+				deliveryMenResponse?.success && deliveryMenResponse.data
+					? Array.isArray(deliveryMenResponse.data)
+						? deliveryMenResponse.data
+						: deliveryMenResponse.data.deliveryMen || []
+					: [];
+
+			// Handle inspections response
+			const inspections =
+				inspectionsResponse?.success && inspectionsResponse.data
+					? Array.isArray(inspectionsResponse.data)
+						? inspectionsResponse.data
+						: inspectionsResponse.data.inspections || []
+					: [];
+
+			// Handle app settings response
+			const appSettings =
+				appSettingsResponse?.success && appSettingsResponse.data
+					? appSettingsResponse.data.appSettings || appSettingsResponse.data
+					: null;
+
+			// Set distributor data
+			setDistributorData({
+				products,
+				deliveryMen,
+				inspections,
+				appSettings,
+			});
+
+			console.log("✅ Distributor data fetched successfully:", {
+				productsCount: products.length,
+				deliveryMenCount: deliveryMen.length,
+				inspectionsCount: inspections.length,
+				hasAppSettings: !!appSettings,
+			});
+		} catch (error) {
+			console.error("❌ Error fetching distributor data:", error);
+			Alert.alert(
+				"Error",
+				"Failed to load distributor data. Please try again."
+			);
+		} finally {
+			setLoadingDistributorData(false);
+		}
+	};
+
+	// New function to handle CSV export for specific distributor
+	const handleExportDistributorInspections = async (distributor) => {
+		try {
+			if (!token) {
+				Alert.alert("Error", "Authentication token not available");
+				return;
+			}
+
+			const distributorId = distributor._id || distributor.id;
+			setExportingDistributorId(distributorId);
+
+			// Set token for API service
+			ApiService.setToken(token);
+
+			// Fetch distributor's inspections and delivery men
+			const [inspectionsResponse, deliveryMenResponse] = await Promise.all([
+				ApiService.getInspections(distributorId).catch(() => ({
+					success: false,
+					data: [],
+				})),
+				ApiService.getDeliveryMen(distributorId).catch(() => ({
+					success: false,
+					data: [],
+				})),
+			]);
+
+			// Extract inspections data
+			const inspections =
+				inspectionsResponse?.success && inspectionsResponse.data
+					? Array.isArray(inspectionsResponse.data)
+						? inspectionsResponse.data
+						: inspectionsResponse.data.inspections || []
+					: [];
+
+			// Extract delivery men data
+			const deliveryMen =
+				deliveryMenResponse?.success && deliveryMenResponse.data
+					? Array.isArray(deliveryMenResponse.data)
+						? deliveryMenResponse.data
+						: deliveryMenResponse.data.deliveryMen || []
+					: [];
+
+			if (inspections.length === 0) {
+				Alert.alert(
+					"No Data",
+					`No inspections found for ${distributor.agencyName}`
+				);
+				return;
+			}
+
+			// Generate filename with distributor info
+			const fileName = `${distributor.agencyName}_${
+				distributor.sapCode
+			}_inspections_${new Date().toISOString().slice(0, 10)}`;
+
+			// Call the export function
+			const result = await exportInspectionsViaApiService(
+				inspections,
+				deliveryMen,
+				fileName,
+				token
+			);
+
+			if (result.success) {
+				Alert.alert(
+					"Success",
+					`Exported ${inspections.length} inspections for ${distributor.agencyName}`
+				);
+			}
+		} catch (error) {
+			console.error("Export error for distributor:", error);
+			Alert.alert(
+				"Export Error",
+				error.message || "Failed to export inspections"
+			);
+		} finally {
+			setExportingDistributorId(null);
+		}
 	};
 
 	const handleRejectDistributor = (request) => {
@@ -178,35 +399,71 @@ const SuperAdminDashboard = () => {
 		</View>
 	);
 
-	const renderDistributor = ({ item }) => (
-		<View style={styles.distributorCard}>
-			<View style={styles.distributorInfo}>
-				<Text style={styles.distributorName}>{item.agencyName}</Text>
-				<Text style={styles.distributorSap}>SAP: {item.sapCode}</Text>
-				<Text style={styles.distributorAdmin}>Admin: {item.adminName}</Text>
-				<Text style={styles.distributorStats}>
-					Delivery Men: {item.deliveryMen?.length || 0}
-				</Text>
-				<Text style={styles.distributorStats}>
-					Requested At:{" "}
-					{new Date(item.requestedAt).toLocaleTimeString("en-GB", {
-						day: "2-digit",
-						month: "short",
-						year: "numeric",
-					})}
-				</Text>
+	const renderDistributor = ({ item }) => {
+		const isExporting = exportingDistributorId === (item._id || item.id);
 
-				<Text style={styles.distributorStats}>
-					Rejected At:{" "}
-					{new Date(item.updatedAt).toLocaleTimeString("en-GB", {
-						day: "2-digit",
-						month: "short",
-						year: "numeric",
-					})}
-				</Text>
+		return (
+			<View style={styles.distributorCard}>
+				<View style={styles.distributorInfo}>
+					<Text style={styles.distributorName}>{item.agencyName}</Text>
+					<Text style={styles.distributorSap}>SAP: {item.sapCode}</Text>
+					<Text style={styles.distributorAdmin}>Admin: {item.adminName}</Text>
+					<View style={styles.distributorStatsContainer}>
+						<Text style={styles.distributorStats}>
+							Delivery Men: {item.deliveryMen?.length || 0} 
+						</Text>
+						<Text style={styles.distributorStats}>
+							|
+						</Text>
+						<Text style={styles.distributorStats}>
+							Inspections:{" "}
+							{inspections.filter(
+								(inspection) =>
+									inspection?.distributorId?.sapCode === item?.sapCode
+							)?.length || 0}
+						</Text>
+					</View>
+					<Text style={styles.distributorStats}>
+						Approved At:{" "}
+						{new Date(item.updatedAt).toLocaleDateString("en-GB", {
+							day: "2-digit",
+							month: "short",
+							year: "numeric",
+						})}
+					</Text>
+				</View>
+				<View style={styles.distributorActions}>
+					{/* <TouchableOpacity
+						style={styles.viewButton}
+						onPress={() => handleViewDistributorData(item)}
+					>
+						<Ionicons name='eye' size={16} color='#FFFFFF' />
+						<Text style={styles.viewButtonText}>View</Text>
+					</TouchableOpacity> */}
+					<TouchableOpacity
+						style={[
+							styles.exportButton,
+							isExporting && styles.exportButtonDisabled,
+						]}
+						onPress={() => handleExportDistributorInspections(item)}
+						disabled={isExporting}
+					>
+						{isExporting ? (
+							<>
+								<Ionicons name='hourglass' size={16} color='#FFFFFF' />
+								<Text style={styles.exportButtonText}>Exporting...</Text>
+							</>
+						) : (
+							<>
+								<Ionicons name='download' size={16} color='#FFFFFF' />
+								<Text style={styles.exportButtonText}>Export CSV</Text>
+							</>
+						)}
+					</TouchableOpacity>
+				</View>
 			</View>
-		</View>
-	);
+		);
+	};
 
 	const handleLogout = () => {
 		Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -259,11 +516,9 @@ const SuperAdminDashboard = () => {
 						<Text style={styles.statLabel}>Total Inspections</Text>
 					</View>
 					<View style={styles.statCard}>
-						<Ionicons name='cash' size={24} color='#8B5CF6' />
-						<Text style={styles.statNumber}>
-							₹{stats.totalRevenue?.toLocaleString() || 0}
-						</Text>
-						<Text style={styles.statLabel}>Total Revenue</Text>
+						<Ionicons name='clipboard' size={24} color='#8B5CF6' />
+						<Text style={styles.statNumber}>{inspections?.length || 0}</Text>
+						<Text style={styles.statLabel}>Total Inspections</Text>
 					</View>
 				</View>
 
@@ -354,6 +609,75 @@ const SuperAdminDashboard = () => {
 					</View>
 				</View>
 			</Modal>
+
+			{/* Distributor Details Modal */}
+			<Modal
+				visible={showDistributorModal}
+				animationType='slide'
+				transparent={true}
+				onRequestClose={() => setShowDistributorModal(false)}
+			>
+				<View style={styles.modalOverlay}>
+					<View style={styles.distributorModalContent}>
+						<View style={styles.distributorModalHeader}>
+							<Text style={styles.distributorModalTitle}>
+								{selectedDistributor?.agencyName} Details
+							</Text>
+							<TouchableOpacity
+								onPress={() => setShowDistributorModal(false)}
+								style={styles.closeModalButton}
+							>
+								<Ionicons name='close' size={24} color='#6B7280' />
+							</TouchableOpacity>
+						</View>
+
+						{loadingDistributorData ? (
+							<View style={styles.distributorModalLoading}>
+								<LoadingIndicator />
+								<Text style={styles.loadingText}>
+									Loading distributor data...
+								</Text>
+							</View>
+						) : (
+							<ScrollView style={styles.distributorModalScroll}>
+								<View style={styles.distributorDetailSection}>
+									<Text style={styles.distributorDetailTitle}>Products</Text>
+									<Text style={styles.distributorDetailValue}>
+										{distributorData.products.length} products available
+									</Text>
+								</View>
+
+								<View style={styles.distributorDetailSection}>
+									<Text style={styles.distributorDetailTitle}>
+										Delivery Men
+									</Text>
+									<Text style={styles.distributorDetailValue}>
+										{distributorData.deliveryMen.length} delivery personnel
+									</Text>
+								</View>
+
+								<View style={styles.distributorDetailSection}>
+									<Text style={styles.distributorDetailTitle}>Inspections</Text>
+									<Text style={styles.distributorDetailValue}>
+										{distributorData.inspections.length} total inspections
+									</Text>
+								</View>
+
+								<View style={styles.distributorDetailSection}>
+									<Text style={styles.distributorDetailTitle}>
+										App Settings
+									</Text>
+									<Text style={styles.distributorDetailValue}>
+										{distributorData.appSettings
+											? "Configured"
+											: "Not configured"}
+									</Text>
+								</View>
+							</ScrollView>
+						)}
+					</View>
+				</View>
+			</Modal>
 		</View>
 	);
 };
@@ -372,6 +696,7 @@ const styles = StyleSheet.create({
 	loadingText: {
 		fontSize: 16,
 		color: "#6B7280",
+		marginTop: 8,
 	},
 	header: {
 		backgroundColor: "#5563EB",
@@ -536,8 +861,6 @@ const styles = StyleSheet.create({
 		borderRadius: 8,
 		padding: 16,
 		marginBottom: 12,
-		flexDirection: "row",
-		alignItems: "center",
 		borderLeftWidth: 4,
 		borderLeftColor: "#10B981",
 	},
@@ -553,6 +876,7 @@ const styles = StyleSheet.create({
 	},
 	distributorInfo: {
 		flex: 1,
+		marginBottom: 12,
 	},
 	distributorName: {
 		fontSize: 16,
@@ -570,9 +894,53 @@ const styles = StyleSheet.create({
 		color: "#6B7280",
 		marginBottom: 2,
 	},
+	distributorStatsContainer: {
+		flexDirection: "row",
+		gap: 12,
+		marginBottom: 12,
+	},
 	distributorStats: {
 		fontSize: 12,
 		color: "#9CA3AF",
+	},
+	distributorActions: {
+		flexDirection: "row",
+		gap: 8,
+	},
+	viewButton: {
+		backgroundColor: "#5563EB",
+		flexDirection: "row",
+		alignItems: "center",
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderRadius: 6,
+		flex: 1,
+		justifyContent: "center",
+	},
+	viewButtonText: {
+		color: "#FFFFFF",
+		fontSize: 14,
+		fontWeight: "500",
+		marginLeft: 4,
+	},
+	exportButton: {
+		backgroundColor: "#059669",
+		flexDirection: "row",
+		alignItems: "center",
+		paddingHorizontal: 12,
+		paddingVertical: 8,
+		borderRadius: 6,
+		flex: 1,
+		justifyContent: "center",
+	},
+	exportButtonDisabled: {
+		backgroundColor: "#9CA3AF",
+	},
+	exportButtonText: {
+		color: "#FFFFFF",
+		fontSize: 14,
+		fontWeight: "500",
+		marginLeft: 4,
 	},
 	statusBadge: {
 		paddingHorizontal: 8,
@@ -656,6 +1024,55 @@ const styles = StyleSheet.create({
 		color: "#FFFFFF",
 		fontSize: 16,
 		fontWeight: "600",
+	},
+	// New styles for distributor details modal
+	distributorModalContent: {
+		backgroundColor: "#FFFFFF",
+		borderRadius: 16,
+		padding: 0,
+		width: "95%",
+		maxWidth: 500,
+		maxHeight: "80%",
+	},
+	distributorModalHeader: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		padding: 20,
+		borderBottomWidth: 1,
+		borderBottomColor: "#E5E7EB",
+	},
+	distributorModalTitle: {
+		fontSize: 18,
+		fontWeight: "bold",
+		color: "#1F2937",
+		flex: 1,
+	},
+	closeModalButton: {
+		padding: 4,
+	},
+	distributorModalLoading: {
+		padding: 40,
+		alignItems: "center",
+	},
+	distributorModalScroll: {
+		padding: 20,
+	},
+	distributorDetailSection: {
+		marginBottom: 16,
+		padding: 16,
+		backgroundColor: "#F9FAFB",
+		borderRadius: 8,
+	},
+	distributorDetailTitle: {
+		fontSize: 16,
+		fontWeight: "600",
+		color: "#1F2937",
+		marginBottom: 4,
+	},
+	distributorDetailValue: {
+		fontSize: 14,
+		color: "#6B7280",
 	},
 });
 

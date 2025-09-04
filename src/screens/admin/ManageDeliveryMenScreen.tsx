@@ -192,10 +192,12 @@ const DeliveryManManagement = () => {
 					<TouchableOpacity
 						style={styles.iconButton}
 						onPress={() =>
+						{
 							navigation.navigate(
 								"DeliveryManDetails" as never,
 								{ deliveryMan: item } as never
 							)
+						}
 						}
 					>
 						<Ionicons name='eye' size={22} color='#5563EB' />

@@ -106,8 +106,12 @@ const DeliveryHistory = () => {
 						Consumer: {consumer.consumerNumber}
 					</Text>
 					<Text style={styles.inspectionDate}>
-						{new Date(item.createdAt).toLocaleDateString()} at{" "}
-						{new Date(item.date).toLocaleTimeString()}
+						{new Date(item.createdAt).toLocaleDateString("en-GB", {
+							day: "2-digit",
+							month: "short",
+							year: "numeric",
+						})}{" "}
+						at {new Date(item.createdAt).toLocaleTimeString()}
 					</Text>
 					<Text style={styles.inspectionAmount}>
 						Amount: ₹{item.totalAmount}

@@ -69,14 +69,15 @@ const SearchInspection = () => {
 						month: "short",
 						year: "numeric",
 					})
-			);
-		
+				);
+
 		const deliveryMenName = filters.deliveryManName;
 		const deliveryManNameMatch =
-			!filters.deliveryManName || deliveryMen.find(
+			!filters.deliveryManName ||
+			deliveryMen.find(
 				(deliveryMan) =>
 					deliveryMan.name.toLowerCase() === deliveryMenName.toLowerCase()
-			)
+			);
 
 		return nameMatch && dateMatch && numberMatch && deliveryManNameMatch;
 	});
@@ -111,8 +112,12 @@ const SearchInspection = () => {
 						Delivery Man: {item.deliveryManId.name}
 					</Text>
 					<Text style={styles.inspectionDate}>
-						{new Date(item.createdAt).toLocaleDateString()} at{" "}
-						{new Date(item.createdAt).toLocaleTimeString()}
+						{new Date(item.createdAt).toLocaleDateString("en-GB", {
+							day: "2-digit",
+							month: "short",
+							year: "numeric",
+						})}{" "}
+						at {new Date(item.createdAt).toLocaleTimeString()}
 					</Text>
 					<Text style={styles.inspectionAmount}>
 						Amount: ₹{item.totalAmount}

@@ -46,7 +46,7 @@ const AdminHistory = () => {
 	const renderDeliveryMan = ({ item }: { item: any }) => {
 		// Calculate stats for this delivery man
 		const deliveryManInspections = inspections.filter(
-			(inspection) => inspection.deliveryManId === item.id
+			(inspection) => inspection.deliveryManId._id === item._id
 		);
 		const totalInspections = deliveryManInspections.length;
 		const totalSales = deliveryManInspections.reduce(

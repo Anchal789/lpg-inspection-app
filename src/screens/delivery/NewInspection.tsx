@@ -63,8 +63,8 @@ const inspectionQuestions = [
 		hindi: "क्या ग्राहक हॉट प्लेट की सर्विसिंग कराना चाहता है?",
 	},
 	{
-		english: "Is hot plate with BSI mark?",
-		hindi: "क्या हॉट प्लेट BSI मार्क के साथ है?",
+		english: "Is hot plate with ISI mark?",
+		hindi: "क्या हॉट प्लेट ISI मार्क के साथ है?",
 	},
 	{
 		english: "Does consumer wish to upgrade with Hi-star hotplate?",
@@ -113,7 +113,7 @@ const labels = {
 		consumerNameMinLength: "Consumer name must be at least 3 characters",
 		consumerNameMaxLength: "Consumer name must not exceed 40 characters",
 		consumerNumberRequired: "Consumer number is required",
-		consumerNumberMinLength: "Consumer number must be at least 5 characters",
+		consumerNumberMinLength: "Consumer number must be at least 4 characters",
 		consumerNumberMaxLength: "Consumer number must not exceed 16 characters",
 		consumerNumberOnlyNumbers: "Consumer number must contain only numbers",
 		mobileNumberRequired: "Mobile number is required",
@@ -174,7 +174,7 @@ const labels = {
 		consumerNameMinLength: "उपभोक्ता का नाम कम से कम 3 अक्षरों का होना चाहिए",
 		consumerNameMaxLength: "उपभोक्ता का नाम 40 अक्षरों से अधिक नहीं होना चाहिए",
 		consumerNumberRequired: "उपभोक्ता संख्या आवश्यक है",
-		consumerNumberMinLength: "उपभोक्ता संख्या कम से कम 5 अंकों की होनी चाहिए",
+		consumerNumberMinLength: "उपभोक्ता संख्या कम से कम 4 अंकों की होनी चाहिए",
 		consumerNumberMaxLength: "उपभोक्ता संख्या 16 अंकों से अधिक नहीं होनी चाहिए",
 		consumerNumberOnlyNumbers: "उपभोक्ता संख्या में केवल संख्याएं होनी चाहिए",
 		mobileNumberRequired: "मोबाइल नंबर आवश्यक है",
@@ -517,7 +517,6 @@ const NewInspection = () => {
 
 			if (formData.image) {
 				try {
-
 					// Upload with proper timeout and error handling
 					const uploadResponse = await Promise.race([
 						ApiService.uploadImage(formData.image), // Pass URI directly
@@ -838,6 +837,9 @@ const NewInspection = () => {
 										mode='date'
 										value={formData.surakshaHoseDueDate || new Date()}
 										onChange={handleDateChange}
+										minimumDate={new Date().setFullYear(
+											new Date().getFullYear() + 1
+										)}
 									/>
 								)}
 							</View>

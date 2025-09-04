@@ -14,15 +14,18 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
+import { useData } from "../../context/DataContext";
 
 const RegisterScreen = () => {
-	const { sapCode } = useAuth();
+	const { sapCode, user } = useAuth();
 	const [formData, setFormData] = useState({
 		name: "",
 		phone: "",
 		password: "",
 		sapCode: "",
 	});
+
+	const { refreshData } = useData();
 	const [showPassword, setShowPassword] = useState(false);
 	const [errors, setErrors] = useState({});
 	const [loading, setLoading] = useState(false);
@@ -68,13 +71,25 @@ const RegisterScreen = () => {
 				phone: formData.phone,
 				password: formData.password,
 				role: "delivery",
-				sapCode: sapCode, // Get SAP code from navigation params
+				sapCode: sapCode || user?.sapCode, // Get SAP code from navigation params
 			};
 
 			const success = await registerUser(userData);
 			if (success) {
+				await refreshData()
 				Alert.alert("Success", "User registered successfully!", [
-					{ text: "OK", onPress: () => navigation.goBack() },
+					{
+						text: "OK",
+						onPress: () => {
+							setFormData({
+								name: "",
+								phone: "",
+								password: "",
+								sapCode: "",
+							});
+							navigation.navigate("AdminDashboard");
+						},
+					},
 				]);
 			} else {
 				Alert.alert("Error", "Registration failed. Please try again.");

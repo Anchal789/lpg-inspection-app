@@ -67,8 +67,12 @@ const InspectionDetails = () => {
 				<View style={styles.infoRow}>
 					<Text style={styles.label}>Date & Time:</Text>
 					<Text style={styles.value}>
-						{new Date(inspection.inspectionDate).toLocaleDateString()} at{" "}
-						{new Date(inspection.inspectionDate).toLocaleTimeString()}
+						{new Date(inspection.inspectionDate).toLocaleDateString("en-GB", {
+							day: "2-digit",
+							month: "short",
+							year: "numeric",
+						})}{" "}
+						at {new Date(inspection.inspectionDate).toLocaleTimeString()}
 					</Text>
 				</View>
 				<View style={styles.infoRow}>

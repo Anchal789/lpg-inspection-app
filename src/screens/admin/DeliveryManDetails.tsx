@@ -19,23 +19,41 @@ const DeliveryManDetails = () => {
 	const { inspections } = useData();
 	const [showFilters, setShowFilters] = useState(false);
 
-	const deliveryMan = (route.params as any)?.deliveryMan;
+	const deliveryMan = (route.params as any).deliveryMan;
 
 	const [nameFilter, setNameFilter] = useState("");
 	const [dateFilter, setDateFilter] = useState("");
 	const [consumerNumberFilter, setConsumerNumberFilter] = useState("");
 
 	const inspectionsByDeliveryMan = inspections?.filter(
-		(inspection) => inspection.deliveryManId === deliveryMan.id
+		(inspection) => inspection.deliveryManId._id === deliveryMan._id
 	);
 
 	const filteredInspections = inspectionsByDeliveryMan.filter((inspection) => {
-		const nameMatch = inspection.consumerName
-			.toLowerCase()
-			.includes(nameFilter.toLowerCase());
-		const dateMatch = dateFilter ? inspection.date.includes(dateFilter) : true;
+		const nameMatch =
+			!nameFilter.consumerName ||
+			inspection.consumer.name
+				.toLowerCase()
+				.includes(nameFilter.consumerName.toLowerCase());
+		const dateMatch =
+			!dateFilter ||
+			new Date(inspection.createdAt)
+				.toLocaleDateString("en-GB", {
+					day: "2-digit",
+					month: "short",
+					year: "numeric",
+				})
+				.includes(
+					dateFilter.toLocaleDateString("en-GB", {
+						day: "2-digit",
+						month: "short",
+						year: "numeric",
+					})
+				);
 		const consumerNumberMatch = consumerNumberFilter
-			? inspection.consumerNumber.includes(consumerNumberFilter)
+			? inspection.consumer.consumerNumber
+					.toLowerCase()
+					.includes(consumerNumberFilter.toLowerCase())
 			: true;
 		return nameMatch && dateMatch && consumerNumberMatch;
 	});
@@ -51,13 +69,17 @@ const DeliveryManDetails = () => {
 			}
 		>
 			<View style={styles.inspectionInfo}>
-				<Text style={styles.consumerName}>{item.consumerName}</Text>
+				<Text style={styles.consumerName}>{item.consumer.name}</Text>
 				<Text style={styles.consumerNumber}>
-					Consumer: {item.consumerNumber}
+					Consumer: {item.consumer.consumerNumber}
 				</Text>
 				<Text style={styles.inspectionDate}>
-					{new Date(item.date).toLocaleDateString()} at{" "}
-					{new Date(item.date).toLocaleTimeString()}
+					{new Date(item.createdAt).toLocaleDateString("en-GB", {
+						day: "2-digit",
+						month: "short",
+						year: "numeric",
+					})}{" "}
+					at {new Date(item.createdAt).toLocaleTimeString()}
 				</Text>
 				<Text style={styles.inspectionAmount}>Amount: ₹{item.totalAmount}</Text>
 			</View>
@@ -81,8 +103,18 @@ const DeliveryManDetails = () => {
 					</TouchableOpacity>
 				</View>
 				<Text style={styles.deliveryManStats}>
-					Total Inspections: {deliveryMan.totalInspections} | Total Sales: ₹
-					{deliveryMan.totalSales.toLocaleString()}
+					Total Inspections:{" "}
+					{
+						inspections.filter(
+							(inspection) => inspection.deliveryManId._id === deliveryMan._id
+						).length
+					}{" "}
+					| Total Sales: ₹
+					{inspections
+						.filter(
+							(inspection) => inspection.deliveryManId._id === deliveryMan._id
+						)
+						.reduce((sum, inspection) => sum + inspection.totalAmount, 0)}
 				</Text>
 			</View>
 
